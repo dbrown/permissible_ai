@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Requests{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 2rem;">Admin Access Requests</h1>
+
+<div style="margin-bottom: 2rem;">
+    <h2 style="color: #667eea; margin-bottom: 1rem;">⏳ Pending Requests ({{ pending|length }})</h2>
+    {% if pending %}
+    <table>
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Email</th>
+                <th>Requested</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for request in pending %}
+            <tr>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        {% if request.user.picture %}
+                        <img src="{{ request.user.picture }}" alt="{{ request.user.name }}" style="width: 32px; height: 32px; border-radius: 50%;">
+                        {% endif %}
+                        {{ request.user.name }}
+                    </div>
+                </td>
+                <td>{{ request.user.email }}</td>
+                <td>{{ request.requested_at.strftime('%B %d, %Y at %I:%M %p') }}</td>
+                <td>
+                    <form method="POST" action="{{ url_for('admin.approve_request', request_id=request.id) }}" style="display: inline;">
+                        <button type="submit" class="btn btn-success" style="padding: 0.5rem 1rem; font-size: 0.9rem;">Approve</button>
+                    </form>
+                    <form method="POST" action="{{ url_for('admin.reject_request', request_id=request.id) }}" style="display: inline;">
+                        <button type="submit" class="btn btn-danger" style="padding: 0.5rem 1rem; font-size: 0.9rem;">Reject</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #666; padding: 2rem; text-align: center; background: #f8f9fa; border-radius: 10px;">
+        No pending requests at this time
+    </p>
+    {% endif %}
+</div>
+
+<div style="margin-bottom: 2rem;">
+    <h2 style="color: #28a745; margin-bottom: 1rem;">✅ Recently Approved ({{ approved|length }})</h2>
+    {% if approved %}
+    <table>
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Email</th>
+                <th>Requested</th>
+                <th>Reviewed By</th>
+                <th>Reviewed</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for request in approved %}
+            <tr>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        {% if request.user.picture %}
+                        <img src="{{ request.user.picture }}" alt="{{ request.user.name }}" style="width: 32px; height: 32px; border-radius: 50%;">
+                        {% endif %}
+                        {{ request.user.name }}
+                    </div>
+                </td>
+                <td>{{ request.user.email }}</td>
+                <td>{{ request.requested_at.strftime('%b %d, %Y') }}</td>
+                <td>{{ request.reviewer.name if request.reviewer else 'N/A' }}</td>
+                <td>{{ request.reviewed_at.strftime('%b %d, %Y') if request.reviewed_at else 'N/A' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #666; padding: 1rem; background: #f8f9fa; border-radius: 10px;">No approved requests</p>
+    {% endif %}
+</div>
+
+<div>
+    <h2 style="color: #dc3545; margin-bottom: 1rem;">❌ Recently Rejected ({{ rejected|length }})</h2>
+    {% if rejected %}
+    <table>
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Email</th>
+                <th>Requested</th>
+                <th>Reviewed By</th>
+                <th>Reviewed</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for request in rejected %}
+            <tr>
+                <td>
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        {% if request.user.picture %}
+                        <img src="{{ request.user.picture }}" alt="{{ request.user.name }}" style="width: 32px; height: 32px; border-radius: 50%;">
+                        {% endif %}
+                        {{ request.user.name }}
+                    </div>
+                </td>
+                <td>{{ request.user.email }}</td>
+                <td>{{ request.requested_at.strftime('%b %d, %Y') }}</td>
+                <td>{{ request.reviewer.name if request.reviewer else 'N/A' }}</td>
+                <td>{{ request.reviewed_at.strftime('%b %d, %Y') if request.reviewed_at else 'N/A' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #666; padding: 1rem; background: #f8f9fa; border-radius: 10px;">No rejected requests</p>
+    {% endif %}
+</div>
+
+<div style="margin-top: 2rem;">
+    <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+</div>
+{% endblock %}

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}User Management{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 2rem;">User Management</h1>
+
+<div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
+    <p style="color: #666;">Total Users: <strong>{{ users|length }}</strong></p>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>User</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Joined</th>
+            <th>Last Login</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for user in users %}
+        <tr>
+            <td>
+                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                    {% if user.picture %}
+                    <img src="{{ user.picture }}" alt="{{ user.name }}" style="width: 40px; height: 40px; border-radius: 50%;">
+                    {% endif %}
+                    <div>
+                        <strong>{{ user.name }}</strong>
+                        {% if user.id == current_user.id %}
+                        <span style="font-size: 0.8rem; color: #667eea;">(You)</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </td>
+            <td>{{ user.email }}</td>
+            <td>
+                {% if user.is_admin %}
+                <span class="badge badge-admin">Admin</span>
+                {% elif user.is_pending_admin %}
+                <span class="badge badge-pending">Pending Admin</span>
+                {% else %}
+                <span>User</span>
+                {% endif %}
+            </td>
+            <td>{{ user.created_at.strftime('%b %d, %Y') }}</td>
+            <td>{{ user.last_login.strftime('%b %d, %Y %I:%M %p') }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div style="margin-top: 2rem;">
+    <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+</div>
+{% endblock %}
