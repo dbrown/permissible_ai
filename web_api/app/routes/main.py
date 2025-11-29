@@ -3,7 +3,7 @@ Main application routes - dashboard and public pages
 """
 from flask import Blueprint, render_template, redirect, url_for
 from flask_login import current_user, login_required
-from app.models import AdminRequest
+from app.models.user import AdminRequest
 
 bp = Blueprint('main', __name__)
 

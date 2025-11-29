@@ -4,7 +4,7 @@ Authentication routes - handles OAuth login/logout
 from flask import Blueprint, redirect, url_for, flash, session
 from flask_login import login_user, logout_user, login_required
 from app.extensions import oauth, db
-from app.models import User
+from app.models.user import User
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
 

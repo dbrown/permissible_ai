@@ -49,7 +49,7 @@ def api_key_required(f):
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        from app.models import APIKey
+        from app.models.api_key import APIKey
         from flask_login import login_user
         
         api_key = None

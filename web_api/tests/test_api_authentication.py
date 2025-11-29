@@ -3,7 +3,8 @@ Tests for API key authentication and API endpoints
 """
 import pytest
 import json
-from app.models import APIKey, User
+from app.models.api_key import APIKey
+from app.models.user import User
 from app.extensions import db
 
 

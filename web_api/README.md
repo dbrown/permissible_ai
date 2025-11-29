@@ -1,44 +1,113 @@
-# Permissible.ai - Modular OAuth Application
+# Permissible.ai - Secure Multi-Party Data Collaboration Platform
 
-A production-ready Flask application with Google OAuth authentication and PostgreSQL, featuring a clean modular architecture optimized for AI coding and maintenance.
+A production-ready Flask application enabling secure multi-party data analysis using **Trusted Execution Environments (TEEs)** on Google Cloud Platform. Features Google OAuth authentication, PostgreSQL, and a clean modular architecture optimized for AI coding and maintenance.
+
+## 🔒 Core Purpose
+
+**Permissible.ai** allows multiple parties to securely collaborate on sensitive data analysis without exposing raw data to each other. Using Google Cloud Platform's Confidential Computing:
+
+- 🔐 **Upload encrypted datasets** to a trusted execution environment
+- 🔍 **Submit queries** for collaborative analysis
+- ✅ **Verify queries** don't violate privacy before execution
+- 📊 **Receive results** distributed to all authorized parties
+- 🛡️ **TEE attestation** proves code runs in a genuine secure enclave
+
+**Use Cases:**
+- Healthcare: Multi-hospital research without sharing patient records
+- Finance: Cross-bank fraud detection preserving customer privacy
+- Research: Collaborative studies on proprietary datasets
+- Government: Inter-agency analytics with data sovereignty
 
 ## 🏗️ Architecture Overview
 
-This application follows **Flask best practices** with a modular structure:
+This application follows **Flask and GCP best practices** with a modular structure:
 
 ```
 web_api/
-├── app.py                      # Application entry point
-├── config.py                   # Configuration management
-├── requirements.txt            # Dependencies
+├── wsgi.py                     # WSGI entry point (production)
+├── app.py                      # Development entry point
+├── setup.py                    # Package configuration
+├── requirements.txt            # Production dependencies
+├── requirements-dev.txt        # Development dependencies
+├── requirements-test.txt       # Test dependencies
+├── pytest.ini                  # Pytest configuration
 ├── .env.example               # Environment template
-├── .gitignore                 # Git ignore rules
-├── README.md                  # This file
 │
-└── app/                       # Application package
-    ├── __init__.py           # Application factory
-    ├── extensions.py         # Extension initialization
-    ├── models.py             # Database models
-    ├── decorators.py         # Custom decorators
-    │
-    ├── routes/               # Route blueprints
-    │   ├── __init__.py
-    │   ├── auth.py          # Authentication routes
-    │   ├── main.py          # Main routes
-    │   ├── admin.py         # Admin routes
-    │   ├── api_keys.py      # API key management
-    │   └── api.py           # API endpoints
-    │
-    └── templates/            # Jinja2 templates
-        ├── base.html
-        ├── index.html
-        ├── dashboard.html
-        ├── admin_requests.html
-        ├── admin_users.html
-        └── api_keys.html
+├── app/                       # Application package
+│   ├── __init__.py           # Application factory
+│   ├── config.py             # Configuration management
+│   ├── extensions.py         # Extension initialization
+│   │
+│   ├── models/               # Database models (split by domain)
+│   │   ├── __init__.py      # Model exports
+│   │   ├── user.py          # User and AdminRequest models
+│   │   ├── api_key.py       # API key model
+│   │   └── tee.py           # TEE, Dataset, Query models
+│   │
+│   ├── routes/               # Route blueprints
+│   │   ├── __init__.py
+│   │   ├── auth.py          # Authentication routes
+│   │   ├── main.py          # Main routes
+│   │   ├── admin.py         # Admin routes
+│   │   ├── api_keys.py      # API key management
+│   │   ├── api.py           # General API endpoints
+│   │   └── tee.py           # TEE API endpoints
+│   │
+│   ├── services/             # Business logic services
+│   │   └── gcp_tee.py       # GCP Confidential Computing integration
+│   │
+│   ├── utils/                # Utility modules
+│   │   └── decorators.py    # Custom decorators
+│   │
+│   └── templates/            # Jinja2 templates
+│       ├── base.html
+│       ├── index.html
+│       ├── dashboard.html
+│       ├── admin_requests.html
+│       ├── admin_users.html
+│       └── api_keys.html
+│
+├── docs/                      # Documentation
+│   ├── README.md             # Documentation index
+│   ├── api/                  # API documentation
+│   │   ├── examples.md      # API usage examples
+│   │   └── tee.md           # TEE API documentation
+│   └── setup/                # Setup guides
+│       ├── gcp.md           # GCP setup guide
+│       └── testing.md       # Testing guide
+│
+├── scripts/                   # Utility scripts
+│   ├── migrations/           # Database migrations
+│   │   ├── migrate_add_api_keys.py
+│   │   └── migrate_add_tee.py
+│   └── examples/             # Example usage scripts
+│       ├── example_api_usage.py
+│       └── example_tee_workflow.py
+│
+├── tests/                     # Test suite
+│   ├── __init__.py
+│   ├── conftest.py           # Pytest fixtures
+│   ├── unit/                 # Unit tests
+│   ├── integration/          # Integration tests
+│   └── fixtures/             # Test data fixtures
+│
+└── deployment/                # Deployment configurations
+    ├── gcp/                  # GCP deployment
+    │   ├── app.yaml         # App Engine config
+    │   └── cloudbuild.yaml  # Cloud Build CI/CD
+    └── docker/               # Docker deployment
+        └── Dockerfile       # Container image
 ```
 
 ## ✨ Key Features
+
+### Trusted Execution Environment (TEE) Platform
+- 🔐 **Multi-party secure computation** without data sharing
+- 🛡️ **GCP Confidential VM attestation** for trust verification
+- 📦 **Encrypted dataset management** with GCP KMS
+- ✅ **Query verification workflow** prevents privacy violations
+- 📊 **Results distribution** to all authorized participants
+- 🔄 **Cross-party data joins** without exposing raw data
 
 ### Multi-Tenant Admin System
 - ✅ First user automatically becomes administrator
@@ -112,12 +181,76 @@ python app.py
 
 Visit `http://localhost:5000`
 
-### 7. (Optional) Run Migration for Existing Installations
+### 7. Run Database Migrations
 
-If you're upgrading from a previous version without API key support:
+For new installations, tables are created automatically. For existing installations:
 
 ```bash
+# Add API key support (if upgrading)
 python migrate_add_api_keys.py
+
+# Add TEE functionality
+python migrate_add_tee.py
+```
+
+## 🔐 TEE API Quick Start
+
+The TEE API enables secure multi-party data collaboration. See [TEE_API_DOCUMENTATION.md](TEE_API_DOCUMENTATION.md) for complete documentation.
+
+### Basic Workflow
+
+```python
+import requests
+
+API_KEY = "your-api-key"
+headers = {"Authorization": f"Bearer {API_KEY}"}
+
+# 1. Create a TEE
+tee = requests.post("http://localhost:5000/api/tee/environments", 
+    headers=headers,
+    json={
+        "name": "Research Collaboration",
+        "gcp_project_id": "my-project",
+        "gcp_zone": "us-central1-a",
+        "participant_emails": ["partner@company.com"]
+    }
+).json()
+
+# 2. Upload encrypted dataset
+dataset = requests.post(f"http://localhost:5000/api/tee/environments/{tee['tee']['id']}/datasets",
+    headers=headers,
+    json={
+        "name": "My Dataset",
+        "gcs_bucket": "my-bucket",
+        "gcs_path": "data.csv",
+        "schema": {"columns": [{"name": "id", "type": "int"}]}
+    }
+).json()
+
+# 3. Submit query
+query = requests.post(f"http://localhost:5000/api/tee/environments/{tee['tee']['id']}/queries",
+    headers=headers,
+    json={
+        "name": "Analysis",
+        "query_text": "SELECT COUNT(*) FROM dataset_1",
+        "accesses_datasets": [dataset['dataset']['id']],
+        "privacy_level": "aggregate_only"
+    }
+).json()
+
+# 4. Approve query (all participants must approve)
+requests.post(f"http://localhost:5000/api/tee/queries/{query['query']['id']}/approve",
+    headers=headers,
+    json={"notes": "Verified"})
+
+# 5. Get results
+results = requests.get(f"http://localhost:5000/api/tee/queries/{query['query']['id']}/results",
+    headers=headers).json()
+```
+
+Run the complete example:
+```bash
+python example_tee_workflow.py
 ```
 
 This will add the `api_keys` table to your existing database.
@@ -142,9 +275,14 @@ Centralized extension initialization for SQLAlchemy, Flask-Login, and Authlib OA
 Database models with business logic:
 - **User**: Authentication and user management
 - **AdminRequest**: Admin privilege workflow
+- **APIKey**: API key management for external access
+- **TEE**: Trusted Execution Environment instances
+- **Dataset**: Encrypted datasets uploaded to TEEs
+- **Query**: Analysis queries submitted for execution
+- **QueryResult**: Results from completed queries
 
 ### `app/decorators.py`
-Custom decorators including `@admin_required` for route protection.
+Custom decorators including `@admin_required` and `@api_key_required` for route protection.
 
 ### `app/routes/auth.py`
 Authentication blueprint handling OAuth login/logout.
@@ -156,6 +294,26 @@ Main application routes (landing page, dashboard).
 Admin management routes for users and access requests.
 
 ### `app/routes/api_keys.py`
+API key management routes for creating, viewing, renaming, and deleting API keys.
+
+### `app/routes/api.py`
+General API endpoints (health, user info, etc.).
+
+### `app/routes/tee.py`
+**TEE API endpoints** for secure multi-party data collaboration:
+- TEE creation and management
+- Dataset upload and encryption
+- Query submission and approval workflow
+- Results distribution
+- Attestation verification
+
+### `app/services/gcp_tee.py`
+**GCP Confidential Computing integration**:
+- Confidential VM creation
+- Attestation token verification
+- Dataset encryption with KMS
+- Query execution in TEE
+- Signed URL generation for results
 API key management routes for creating, viewing, renaming, and deleting API keys.
 
 ### `app/routes/api.py`
@@ -298,6 +456,44 @@ API keys can be provided in three ways:
 - `last_used`: Last usage timestamp
 - `is_active`: Active status
 
+### TEE Tables
+
+#### tees
+- `id`: Primary key
+- `name`: TEE name
+- `creator_id`: Foreign key to users
+- `gcp_instance_id`: GCP Confidential VM identifier
+- `attestation_token`: JWT attestation from GCP
+- `status`: creating/active/suspended/terminated
+- `allow_cross_party_joins`: Boolean
+- `require_unanimous_approval`: Boolean
+
+#### datasets
+- `id`: Primary key
+- `tee_id`: Foreign key to tees
+- `owner_id`: Foreign key to users
+- `name`: Dataset name
+- `gcs_path`: Cloud Storage path
+- `encryption_key_id`: KMS key identifier
+- `status`: uploading/encrypted/available
+- `schema_info`: JSON schema
+
+#### queries
+- `id`: Primary key
+- `tee_id`: Foreign key to tees
+- `submitter_id`: Foreign key to users
+- `query_text`: SQL or analysis code
+- `accesses_datasets`: JSON array of dataset IDs
+- `privacy_level`: aggregate_only/k_anonymized/etc.
+- `status`: submitted/approved/executing/completed
+
+#### query_results
+- `id`: Primary key
+- `query_id`: Foreign key to queries
+- `result_data`: JSON results (for small results)
+- `gcs_path`: Cloud Storage path (for large results)
+- `result_format`: json/csv/parquet
+
 ## Security Features
 
 - ✅ Google OAuth 2.0 authentication
@@ -308,6 +504,11 @@ API keys can be provided in three ways:
 - ✅ Admin-only route protection
 - ✅ API key authentication for external access
 - ✅ Secure random key generation (48-byte URL-safe tokens)
+- ✅ **GCP Confidential Computing** with AMD SEV/Intel TDX
+- ✅ **TEE attestation verification** for trusted execution
+- ✅ **End-to-end encryption** with GCP KMS
+- ✅ **Query verification workflow** prevents privacy violations
+- ✅ **Multi-party approval** for data access
 
 ## Deployment Considerations
 
@@ -327,16 +528,28 @@ DATABASE_URL=postgresql://user:password@host:port/database
 GOOGLE_CLIENT_ID=<your-client-id>
 GOOGLE_CLIENT_SECRET=<your-client-secret>
 FLASK_ENV=production
+
+# For TEE functionality (when using real GCP services)
+# GCP_PROJECT_ID=<your-gcp-project>
+# GCP_DEFAULT_ZONE=us-central1-a
 ```
 
 ### Deployment Platforms
 
 This application can be deployed to:
-- **Heroku**: Add PostgreSQL addon
-- **AWS**: Use RDS for PostgreSQL
-- **Google Cloud**: Use Cloud SQL
-- **DigitalOcean**: App Platform with managed database
-- **Railway**: Built-in PostgreSQL support
+- **Google Cloud Platform**: **Required** for full TEE functionality (App Engine + Cloud SQL + Confidential Computing)
+- **Heroku**: Add PostgreSQL addon (basic features only, no TEE)
+- **AWS**: Use RDS for PostgreSQL (basic features only, no TEE)
+- **DigitalOcean**: App Platform with managed database (basic features only, no TEE)
+- **Railway**: Built-in PostgreSQL support (basic features only, no TEE)
+
+**Important:** Full TEE functionality requires GCP with:
+- Confidential Computing (AMD SEV or Intel TDX)
+- Cloud KMS for encryption
+- Cloud Storage for datasets
+- Service account with appropriate permissions
+
+See [GCP_SETUP_GUIDE.md](GCP_SETUP_GUIDE.md) for complete setup instructions.
 
 ## File Structure
 
@@ -377,6 +590,36 @@ web_api/
 ### API Endpoints (require API key)
 - `GET /api/health` - Health check (public)
 - `GET /api/me` - Get authenticated user info
+- `GET /api/users` - List all users (admin only)
+
+### TEE API Endpoints (require API key)
+
+See [TEE_API_DOCUMENTATION.md](TEE_API_DOCUMENTATION.md) for complete documentation.
+
+**TEE Management:**
+- `GET /api/tee/environments` - List TEEs
+- `POST /api/tee/environments` - Create TEE
+- `GET /api/tee/environments/{id}` - Get TEE details
+- `POST /api/tee/environments/{id}/attestation` - Verify attestation
+- `POST /api/tee/environments/{id}/participants` - Add participant
+- `POST /api/tee/environments/{id}/terminate` - Terminate TEE
+
+**Dataset Management:**
+- `GET /api/tee/environments/{id}/datasets` - List datasets
+- `POST /api/tee/environments/{id}/datasets` - Upload dataset
+- `GET /api/tee/datasets/{id}` - Get dataset details
+- `POST /api/tee/datasets/{id}/mark-available` - Mark available
+
+**Query Management:**
+- `GET /api/tee/environments/{id}/queries` - List queries
+- `POST /api/tee/environments/{id}/queries` - Submit query
+- `GET /api/tee/queries/{id}` - Get query details
+- `POST /api/tee/queries/{id}/approve` - Approve query
+- `POST /api/tee/queries/{id}/reject` - Reject query
+
+**Results:**
+- `GET /api/tee/queries/{id}/results` - Get results
+- `GET /api/tee/queries/{qid}/results/{rid}/download` - Download result file
 - `GET /api/users` - List all users (admin only)
 
 ## License

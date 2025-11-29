@@ -4,8 +4,8 @@ Admin routes - user management and admin request handling
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_required, current_user
 from app.extensions import db
-from app.models import User, AdminRequest
-from app.decorators import admin_required
+from app.models.user import User, AdminRequest
+from app.utils.decorators import admin_required
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
 

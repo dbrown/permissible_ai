@@ -2,7 +2,7 @@
 Application factory and initialization
 """
 from flask import Flask
-from config import config
+from app.config import config
 from app.extensions import db, login_manager, oauth
 
 
@@ -32,20 +32,21 @@ def create_app(config_name='default'):
     login_manager.login_message_category = 'info'
     
     # Register user loader
-    from app.models import User
+    from app.models.user import User
     
     @login_manager.user_loader
     def load_user(user_id):
         return User.query.get(int(user_id))
     
     # Register blueprints
-    from app.routes import auth, main, admin, api_keys, api
+    from app.routes import auth, main, admin, api_keys, api, tee
     
     app.register_blueprint(auth.bp)
     app.register_blueprint(main.bp)
     app.register_blueprint(admin.bp)
     app.register_blueprint(api_keys.bp)
     app.register_blueprint(api.bp)
+    app.register_blueprint(tee.bp)
     
     # Create database tables
     with app.app_context():

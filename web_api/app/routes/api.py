@@ -3,8 +3,8 @@ API endpoints that require API key authentication
 """
 from flask import Blueprint, jsonify
 from flask_login import current_user
-from app.decorators import api_key_required
-from app.models import User
+from app.utils.decorators import api_key_required
+from app.models.user import User
 
 bp = Blueprint('api', __name__, url_prefix='/api')
 

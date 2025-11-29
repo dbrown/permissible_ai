@@ -2,7 +2,8 @@
 Tests for API Key routes (CRUD operations)
 """
 import pytest
-from app.models import APIKey, User
+from app.models.api_key import APIKey
+from app.models.user import User
 from app.extensions import db
 from flask import url_for
 

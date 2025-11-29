@@ -1,0 +1,50 @@
+steps:
+  # Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: [
+      'build',
+      '-t', 'gcr.io/$PROJECT_ID/permissible-tee-api:$COMMIT_SHA',
+      '-t', 'gcr.io/$PROJECT_ID/permissible-tee-api:latest',
+      '-f', 'deployment/docker/Dockerfile',
+      '.'
+    ]
+  
+  # Push the Docker image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/permissible-tee-api:$COMMIT_SHA']
+  
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/permissible-tee-api:latest']
+  
+  # Run tests
+  - name: 'gcr.io/$PROJECT_ID/permissible-tee-api:$COMMIT_SHA'
+    entrypoint: 'python'
+    args: ['-m', 'pytest', 'tests/']
+    env:
+      - 'FLASK_ENV=testing'
+  
+  # Deploy to Cloud Run (optional - uncomment if using Cloud Run)
+  # - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  #   entrypoint: gcloud
+  #   args:
+  #     - 'run'
+  #     - 'deploy'
+  #     - 'permissible-tee-api'
+  #     - '--image=gcr.io/$PROJECT_ID/permissible-tee-api:$COMMIT_SHA'
+  #     - '--region=us-central1'
+  #     - '--platform=managed'
+  #     - '--allow-unauthenticated'
+
+# Store images in Container Registry
+images:
+  - 'gcr.io/$PROJECT_ID/permissible-tee-api:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/permissible-tee-api:latest'
+
+# Build configuration
+options:
+  machineType: 'N1_HIGHCPU_8'
+  substitutionOption: 'ALLOW_LOOSE'
+  logging: CLOUD_LOGGING_ONLY
+
+# Timeout for the entire build
+timeout: '1200s'

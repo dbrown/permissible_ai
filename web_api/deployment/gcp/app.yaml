@@ -1,0 +1,35 @@
+runtime: python311
+
+entrypoint: gunicorn -b :$PORT wsgi:application
+
+env_variables:
+  FLASK_ENV: 'production'
+  
+# Enable automatic scaling
+automatic_scaling:
+  min_instances: 1
+  max_instances: 10
+  target_cpu_utilization: 0.65
+  target_throughput_utilization: 0.65
+
+# Cloud SQL connection
+# Uncomment and configure when using Cloud SQL
+# beta_settings:
+#   cloud_sql_instances: your-project:region:instance-name
+
+# VPC access (for private GCP resources)
+# vpc_access_connector:
+#   name: projects/PROJECT_ID/locations/REGION/connectors/CONNECTOR_NAME
+
+handlers:
+# This configures Google App Engine to serve the static files
+- url: /static
+  static_dir: app/static
+  secure: always
+  redirect_http_response_code: 301
+
+# This handler routes all requests not caught above to your main app
+- url: /.*
+  script: auto
+  secure: always
+  redirect_http_response_code: 301

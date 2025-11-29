@@ -1,0 +1,59 @@
+# Restructuring Plan - Following Best Practices
+
+## New Structure:
+web_api/
+├── docs/                          # All documentation
+│   ├── api/                       # API documentation
+│   │   ├── general.md
+│   │   ├── tee.md
+│   │   └── examples.md
+│   ├── setup/                     # Setup guides
+│   │   ├── gcp.md
+│   │   └── testing.md
+│   └── README.md
+│
+├── scripts/                       # Utility scripts
+│   ├── migrations/                # Database migrations
+│   │   ├── add_api_keys.py
+│   │   └── add_tee.py
+│   └── examples/                  # Example usage
+│       ├── api_usage.py
+│       └── tee_workflow.py
+│
+├── app/                           # Application package
+│   ├── __init__.py
+│   ├── config.py                  # Configuration (moved from root)
+│   ├── extensions.py
+│   ├── models/                    # Split models
+│   │   ├── __init__.py
+│   │   ├── user.py
+│   │   ├── tee.py
+│   │   └── api_key.py
+│   ├── routes/                    # Route blueprints
+│   ├── services/                  # Business logic
+│   ├── utils/                     # Utilities
+│   │   ├── __init__.py
+│   │   └── decorators.py
+│   └── templates/
+│
+├── tests/                         # Test suite
+│   ├── conftest.py
+│   ├── unit/
+│   ├── integration/
+│   └── fixtures/
+│
+├── deployment/                    # Deployment configs
+│   ├── gcp/
+│   │   ├── app.yaml
+│   │   └── cloudbuild.yaml
+│   └── docker/
+│       └── Dockerfile
+│
+├── .env.example
+├── .gitignore
+├── requirements.txt
+├── requirements-dev.txt
+├── setup.py
+├── pytest.ini
+├── README.md
+└── wsgi.py                        # Entry point

@@ -3,7 +3,7 @@ API Key management routes
 """
 from flask import Blueprint, render_template, redirect, url_for, flash, request, jsonify
 from flask_login import login_required, current_user
-from app.models import APIKey
+from app.models.api_key import APIKey
 from app.extensions import db
 
 bp = Blueprint('api_keys', __name__, url_prefix='/api-keys')
