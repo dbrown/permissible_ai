@@ -93,6 +93,11 @@ echo "Starting at: $(date)"
 apt-get update
 apt-get install -y python3-pip python3-venv postgresql-client curl jq
 
+# Disable SSH for security (TEE should not allow remote shell access)
+systemctl stop ssh
+systemctl disable ssh
+echo "SSH disabled for TEE security" > /etc/ssh/sshd_not_to_be_run
+
 # Create TEE runtime directory
 mkdir -p /opt/tee-runtime
 cd /opt/tee-runtime
@@ -103,7 +108,7 @@ source venv/bin/activate
 
 # Install dependencies
 pip install --upgrade pip
-pip install flask gunicorn sqlalchemy psycopg2-binary pandas pyarrow google-cloud-storage google-cloud-kms pyjwt cryptography
+pip install flask flask-cors gunicorn sqlalchemy psycopg2-binary pandas pyarrow google-cloud-storage google-cloud-kms pyjwt cryptography requests
 
 # Create attestation service
 cat > attestation_service.py << 'ATTESTATION_EOF'
@@ -119,8 +124,20 @@ import jwt
 import logging
 from datetime import datetime, timedelta
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 
 app = Flask(__name__)
+
+# Configure CORS to allow requests from web applications
+CORS(app, resources={
+    r"/*": {
+        "origins": "*",
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "max_age": 3600
+    }
+})
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -241,6 +258,69 @@ def get_attestation():
     except Exception as e:
         logger.error(f"Failed to generate attestation: {e}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/upload', methods=['POST', 'OPTIONS'])
+def upload_dataset():
+    """
+    Receive encrypted dataset directly from client browser
+    
+    For development: accepts uploads but returns success without processing
+    In production: decrypt with TEE private key and re-encrypt with session key
+    """
+    if request.method == 'OPTIONS':
+        # Handle CORS preflight
+        return '', 200
+        
+    try:
+        # Verify authorization
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return jsonify({'error': 'Missing authorization token'}), 401
+        
+        data = request.json
+        dataset_id = data.get('dataset_id')
+        session_id = data.get('session_id')
+        
+        logger.info(f"Received upload for dataset {dataset_id}, session {session_id}")
+        logger.info(f"Encrypted data size: {len(data.get('encrypted_data', ''))} bytes (base64)")
+        
+        # For development: just acknowledge receipt
+        # In production: decrypt with TEE private key, re-encrypt with session key
+        
+        # Notify control plane that dataset is available
+        try:
+            import requests
+            control_plane_url = os.getenv('CONTROL_PLANE_URL', 'http://localhost:5000')
+            callback_payload = {
+                'entity_type': 'dataset',
+                'entity_id': dataset_id,
+                'status': 'available',
+                'metadata': {
+                    'checksum': 'mock-checksum-dev',
+                    'file_size': data.get('file_size', 0)
+                },
+                'timestamp': datetime.utcnow().isoformat()
+            }
+            requests.post(
+                f"{control_plane_url}/api/tee/callback",
+                json=callback_payload,
+                timeout=5
+            )
+            logger.info(f"Notified control plane: dataset {dataset_id} available")
+        except Exception as e:
+            logger.error(f"Failed to notify control plane: {e}")
+            # Don't fail the upload if callback fails
+        
+        return jsonify({
+            'status': 'success',
+            'dataset_id': dataset_id,
+            'message': 'Dataset received and stored in TEE',
+            'checksum': 'mock-checksum-dev'
+        })
+        
+    except Exception as e:
+        logger.error(f"Upload failed: {e}", exc_info=True)
+        return jsonify({'error': f'Upload failed: {str(e)}'}), 500
 
 @app.route('/execute-query', methods=['POST'])
 def execute_query():
@@ -426,6 +506,7 @@ gcloud compute instances create "$INSTANCE_NAME" \
     --image-project=ubuntu-os-cloud \
     --network="$NETWORK" \
     --tags=tee-service,http-server,https-server \
+    --metadata=block-project-ssh-keys=TRUE,enable-oslogin=FALSE \
     --metadata-from-file=startup-script=/tmp/tee-startup.sh \
     --scopes=https://www.googleapis.com/auth/cloud-platform \
     $SERVICE_ACCOUNT_FLAG

@@ -209,7 +209,7 @@
                     {% if current_user.is_admin %}
                     <span class="badge badge-admin">Admin</span>
                     {% endif %}
-                    <a href="{{ url_for('logout') }}">Logout</a>
+                    <a href="{{ url_for('auth.logout') }}">Logout</a>
                 </li>
             </ul>
         </nav>

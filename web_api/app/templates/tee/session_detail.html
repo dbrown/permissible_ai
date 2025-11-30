@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}{{ session.name }}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 2rem;">
+    <a href="{{ url_for('tee_web.sessions') }}" style="color: #667eea; text-decoration: none;">← Back to Sessions</a>
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 2rem;">
+    <div>
+        <h1 style="margin-bottom: 0.5rem;">{{ session.name }}</h1>
+        <p style="color: #666;">{{ session.description or 'No description' }}</p>
+    </div>
+    <span class="badge {% if session.status.value == 'active' %}badge-admin{% elif session.status.value == 'suspended' %}badge-pending{% endif %}" style="font-size: 1rem; padding: 0.5rem 1rem;">
+        {{ session.status.value|upper }}
+    </span>
+</div>
+
+<!-- Session Info -->
+<div style="background: #f8f9fa; padding: 1.5rem; border-radius: 10px; margin-bottom: 2rem;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
+        <div>
+            <strong style="display: block; color: #667eea; margin-bottom: 0.25rem;">Creator</strong>
+            <span>{{ session.creator.name }}</span>
+        </div>
+        <div>
+            <strong style="display: block; color: #667eea; margin-bottom: 0.25rem;">Participants</strong>
+            <span>{{ session.participants|length }} members</span>
+        </div>
+        <div>
+            <strong style="display: block; color: #667eea; margin-bottom: 0.25rem;">Created</strong>
+            <span>{{ session.created_at.strftime('%B %d, %Y') }}</span>
+        </div>
+        <div>
+            <strong style="display: block; color: #667eea; margin-bottom: 0.25rem;">Approval Type</strong>
+            <span>{% if session.require_unanimous_approval %}Unanimous{% else %}Dataset Owner{% endif %}</span>
+        </div>
+    </div>
+    
+    <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #ddd;">
+        <strong style="display: block; color: #667eea; margin-bottom: 0.5rem;">Participants:</strong>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            {% for participant in session.participants %}
+            <span style="background: white; padding: 0.5rem 1rem; border-radius: 5px; font-size: 0.9rem;">
+                {{ participant.name }}{% if participant.id == session.creator_id %} (Creator){% endif %}
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- Tabs -->
+<div style="border-bottom: 2px solid #ddd; margin-bottom: 2rem;">
+    <div style="display: flex; gap: 2rem;">
+        <a href="#queries" onclick="showTab('queries')" id="tab-queries" style="padding: 1rem 0; color: #667eea; text-decoration: none; border-bottom: 3px solid #667eea; font-weight: 600;">
+            Queries ({{ queries|length }})
+        </a>
+        <a href="#datasets" onclick="showTab('datasets')" id="tab-datasets" style="padding: 1rem 0; color: #666; text-decoration: none; border-bottom: 3px solid transparent;">
+            Datasets ({{ datasets|length }})
+        </a>
+    </div>
+</div>
+
+<!-- Queries Tab -->
+<div id="content-queries">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h2>Queries</h2>
+        <a href="{{ url_for('tee_web.submit_query', session_id=session.id) }}" class="btn btn-primary">+ Submit Query</a>
+    </div>
+    
+    {% if queries %}
+    <div style="display: grid; gap: 1.5rem;">
+        {% for query in queries %}
+        <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 10px; border-left: 4px solid 
+            {% if query.status.value == 'completed' %}#28a745
+            {% elif query.status.value == 'rejected' %}#dc3545
+            {% elif query.status.value == 'verifying' %}#ffc107
+            {% elif query.status.value == 'executing' %}#17a2b8
+            {% else %}#6c757d{% endif %};">
+            
+            <div style="display: flex; justify-content: space-between; align-items: start;">
+                <div style="flex: 1;">
+                    <h3 style="margin-bottom: 0.5rem;">
+                        <a href="{{ url_for('tee_web.query_detail', query_id=query.id) }}" style="color: #667eea; text-decoration: none;">
+                            {{ query.name }}
+                        </a>
+                    </h3>
+                    <p style="color: #666; font-size: 0.9rem; margin-bottom: 1rem;">{{ query.description or 'No description' }}</p>
+                    
+                    <div style="display: flex; gap: 2rem; flex-wrap: wrap; font-size: 0.9rem; color: #666;">
+                        <div>
+                            <strong>Status:</strong>
+                            <span class="badge" style="margin-left: 0.5rem; background: 
+                                {% if query.status.value == 'completed' %}#28a745
+                                {% elif query.status.value == 'rejected' %}#dc3545
+                                {% elif query.status.value == 'verifying' %}#ffc107
+                                {% elif query.status.value == 'executing' %}#17a2b8
+                                {% else %}#6c757d{% endif %}; color: white;">
+                                {{ query.status.value|upper }}
+                            </span>
+                        </div>
+                        <div>
+                            <strong>Submitted by:</strong> {{ query.submitter.name }}
+                        </div>
+                        <div>
+                            <strong>Datasets:</strong> {{ query.accesses_datasets|length }}
+                        </div>
+                        {% if query.id in query_approvals_data %}
+                        <div>
+                            <strong>Approvals:</strong> {{ query_approvals_data[query.id].count }}/{{ query_approvals_data[query.id].required }}
+                            {% if query_approvals_data[query.id].user_approved %}
+                            <span style="color: #28a745;">✓ You approved</span>
+                            {% elif query.status.value in ['submitted', 'verifying'] %}
+                            <span style="color: #ffc107;">⚠ Awaiting your approval</span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        <div>
+                            <strong>Submitted:</strong> {{ query.submitted_at.strftime('%b %d, %Y %I:%M %p') }}
+                        </div>
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 0.5rem;">
+                    <a href="{{ url_for('tee_web.query_detail', query_id=query.id) }}" class="btn btn-secondary" style="padding: 0.5rem 1rem;">View</a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 3rem; background: #f8f9fa; border-radius: 10px;">
+        <p style="color: #666; margin-bottom: 1.5rem;">No queries submitted yet</p>
+        <a href="{{ url_for('tee_web.submit_query', session_id=session.id) }}" class="btn btn-primary">Submit First Query</a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Datasets Tab -->
+<div id="content-datasets" style="display: none;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+        <h2>Datasets</h2>
+        <a href="{{ url_for('tee_web.upload_dataset', session_id=session.id) }}" class="btn btn-primary">+ Upload Dataset</a>
+    </div>
+    
+    {% if datasets %}
+    <div style="display: grid; gap: 1rem;">
+        {% for dataset in datasets %}
+        <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 10px;">
+            <h3 style="margin-bottom: 0.5rem; color: #667eea;">{{ dataset.name }}</h3>
+            <p style="color: #666; font-size: 0.9rem; margin-bottom: 1rem;">{{ dataset.description or 'No description' }}</p>
+            
+            <div style="display: flex; gap: 2rem; flex-wrap: wrap; font-size: 0.9rem; color: #666;">
+                <div><strong>Owner:</strong> {{ dataset.owner.name }}</div>
+                <div><strong>Status:</strong> <span class="badge badge-admin">{{ dataset.status.value|upper }}</span></div>
+                {% if dataset.row_count %}<div><strong>Rows:</strong> {{ dataset.row_count|default('N/A') }}</div>{% endif %}
+                <div><strong>Uploaded:</strong> {{ dataset.uploaded_at.strftime('%b %d, %Y') if dataset.uploaded_at else 'N/A' }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 3rem; background: #f8f9fa; border-radius: 10px;">
+        <p style="color: #666; margin-bottom: 1.5rem;">No datasets uploaded yet</p>
+        <a href="{{ url_for('tee_web.upload_dataset', session_id=session.id) }}" class="btn btn-primary">Upload First Dataset</a>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function showTab(tabName) {
+    // Hide all content
+    document.getElementById('content-queries').style.display = 'none';
+    document.getElementById('content-datasets').style.display = 'none';
+    
+    // Reset all tab styles
+    document.getElementById('tab-queries').style.borderBottomColor = 'transparent';
+    document.getElementById('tab-queries').style.color = '#666';
+    document.getElementById('tab-datasets').style.borderBottomColor = 'transparent';
+    document.getElementById('tab-datasets').style.color = '#666';
+    
+    // Show selected content and style tab
+    document.getElementById('content-' + tabName).style.display = 'block';
+    document.getElementById('tab-' + tabName).style.borderBottomColor = '#667eea';
+    document.getElementById('tab-' + tabName).style.color = '#667eea';
+    document.getElementById('tab-' + tabName).style.fontWeight = '600';
+}
+</script>
+{% endblock %}

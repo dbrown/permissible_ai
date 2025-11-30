@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Create Collaboration Session{% endblock %}
+
+{% block content %}
+<h1 style="margin-bottom: 2rem;">Create New Collaboration Session</h1>
+
+<form method="POST" style="max-width: 600px;">
+    <div style="margin-bottom: 1.5rem;">
+        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Session Name *</label>
+        <input type="text" name="name" required style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;">
+    </div>
+    
+    <div style="margin-bottom: 1.5rem;">
+        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Description</label>
+        <textarea name="description" rows="3" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;" placeholder="What is this collaboration about?"></textarea>
+    </div>
+    
+    <div style="margin-bottom: 1.5rem;">
+        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Participant Emails</label>
+        <textarea name="participant_emails" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;" placeholder="alice@example.com, bob@example.com"></textarea>
+        <small style="color: #666; display: block; margin-top: 0.25rem;">Comma-separated list of participant email addresses</small>
+    </div>
+    
+    <div style="margin-bottom: 1.5rem;">
+        <label style="display: flex; align-items: center; gap: 0.5rem;">
+            <input type="checkbox" name="allow_cross_party_joins" checked style="width: 20px; height: 20px;">
+            <span style="font-weight: 600;">Allow Cross-Party Joins</span>
+        </label>
+        <small style="color: #666; display: block; margin-left: 1.75rem;">Queries can join datasets from multiple participants</small>
+    </div>
+    
+    <div style="margin-bottom: 2rem;">
+        <label style="display: flex; align-items: center; gap: 0.5rem;">
+            <input type="checkbox" name="require_unanimous_approval" checked style="width: 20px; height: 20px;">
+            <span style="font-weight: 600;">Require Unanimous Approval</span>
+        </label>
+        <small style="color: #666; display: block; margin-left: 1.75rem;">All participants must approve queries before execution</small>
+    </div>
+    
+    <div style="display: flex; gap: 1rem;">
+        <button type="submit" class="btn btn-primary">Create Session</button>
+        <a href="{{ url_for('tee_web.sessions') }}" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+
+<div style="background: #fff3cd; padding: 1.5rem; border-radius: 10px; border-left: 4px solid #ffc107; margin-top: 2rem; max-width: 600px;">
+    <h4 style="color: #856404; margin-bottom: 0.5rem;">ℹ️ Session Configuration</h4>
+    <ul style="color: #856404; margin-left: 1.5rem; font-size: 0.9rem;">
+        <li>Sessions are created instantly using shared TEE infrastructure</li>
+        <li>You'll be added as a participant automatically</li>
+        <li>Invited participants must have accounts on this platform</li>
+        <li>All data uploaded to sessions is encrypted and secure</li>
+    </ul>
+</div>
+{% endblock %}

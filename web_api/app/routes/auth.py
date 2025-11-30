@@ -2,7 +2,7 @@
 Authentication routes - handles OAuth login/logout
 """
 from flask import Blueprint, redirect, url_for, flash, session
-from flask_login import login_user, logout_user, login_required
+from flask_login import login_user, logout_user, login_required, current_user
 from app.extensions import oauth, db
 from app.models.user import User
 
@@ -93,7 +93,60 @@ def authorize():
 @login_required
 def logout():
     """Log out the current user"""
-    logout_user()
-    session.clear()
+    from flask import current_app
+    
+    # Log for debugging
+    current_app.logger.info(f'User {current_user.id} logging out')
+    
+    # Flash message BEFORE clearing session
     flash('You have been logged out successfully.', 'info')
-    return redirect(url_for('main.index'))
+    
+    # Explicitly log out the user (this removes the user from the session)
+    logout_user()
+    
+    # Clear all remaining session data
+    session.clear()
+    
+    # Redirect to index with explicit no-cache headers
+    response = redirect(url_for('main.index'))
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    
+    # Clear remember me cookie if it exists
+    response.set_cookie('remember_token', '', expires=0)
+    response.set_cookie('session', '', expires=0)
+    
+    return response
+
+
+@bp.route('/test-login/<email>')
+def test_login(email):
+    """
+    Development-only route to log in as a test user without OAuth.
+    
+    Usage:
+        /auth/test-login/alice@hospital-a.org
+        /auth/test-login/bob@hospital-b.org
+    
+    Only works in development mode for security reasons.
+    """
+    from flask import current_app
+    
+    # Only allow in development mode
+    if not current_app.config.get('DEBUG'):
+        flash('Test login is only available in development mode.', 'error')
+        return redirect(url_for('main.index'))
+    
+    # Find the user by email
+    user = User.query.filter_by(email=email).first()
+    
+    if not user:
+        flash(f'Test user {email} not found. Run scripts/setup_test_users.py to create test users.', 'error')
+        return redirect(url_for('main.index'))
+    
+    # Log the user in
+    login_user(user, remember=True)
+    flash(f'Logged in as test user: {user.name} ({user.email})', 'success')
+    
+    return redirect(url_for('main.dashboard'))

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Submit Query{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 2rem;">
+    <a href="{{ url_for('tee_web.session_detail', session_id=session.id) }}" style="color: #667eea; text-decoration: none;">← Back to {{ session.name }}</a>
+</div>
+
+<h1 style="margin-bottom: 2rem;">Submit Query</h1>
+
+<form method="POST" style="max-width: 800px;">
+    <div style="margin-bottom: 1.5rem;">
+        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Query Name *</label>
+        <input type="text" name="name" required style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;" placeholder="Readmission Rate Analysis">
+    </div>
+    
+    <div style="margin-bottom: 1.5rem;">
+        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Description</label>
+        <textarea name="description" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;" placeholder="Describe what this query does..."></textarea>
+    </div>
+    
+    <div style="margin-bottom: 1.5rem;">
+        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">SQL Query *</label>
+        <textarea name="query_text" rows="10" required style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 0.9rem; font-family: 'Courier New', monospace;" placeholder="SELECT diagnosis, COUNT(*) as total_cases
+FROM combined_data
+GROUP BY diagnosis
+HAVING COUNT(*) >= 10"></textarea>
+    </div>
+    
+    <div style="margin-bottom: 1.5rem;">
+        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Datasets to Access *</label>
+        {% if datasets %}
+        <div style="background: #f8f9fa; padding: 1rem; border-radius: 5px;">
+            {% for dataset in datasets %}
+            <label style="display: flex; align-items: start; gap: 0.5rem; margin-bottom: 0.75rem; cursor: pointer;">
+                <input type="checkbox" name="datasets" value="{{ dataset.id }}" style="width: 20px; height: 20px; margin-top: 0.25rem;">
+                <div>
+                    <div style="font-weight: 600;">{{ dataset.name }}</div>
+                    <div style="font-size: 0.85rem; color: #666;">Owner: {{ dataset.owner.name }}</div>
+                </div>
+            </label>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p style="color: #dc3545; padding: 1rem; background: #f8d7da; border-radius: 5px;">No datasets available. Please upload datasets first.</p>
+        {% endif %}
+    </div>
+    
+    <div style="margin-bottom: 2rem;">
+        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Privacy Level</label>
+        <select name="privacy_level" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;">
+            <option value="aggregate_only">Aggregate Only (recommended)</option>
+            <option value="k_anonymized">K-Anonymized</option>
+            <option value="differential_privacy">Differential Privacy</option>
+            <option value="full_access">Full Access (requires special approval)</option>
+        </select>
+        <small style="color: #666; display: block; margin-top: 0.25rem;">Higher privacy levels require more scrutiny during approval</small>
+    </div>
+    
+    <div style="display: flex; gap: 1rem;">
+        {% if datasets %}
+        <button type="submit" class="btn btn-primary">Submit for Approval</button>
+        {% endif %}
+        <a href="{{ url_for('tee_web.session_detail', session_id=session.id) }}" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+
+<div style="background: #fff3cd; padding: 1.5rem; border-radius: 10px; border-left: 4px solid #ffc107; margin-top: 2rem; max-width: 800px;">
+    <h4 style="color: #856404; margin-bottom: 0.5rem;">⚠️ Query Approval Process</h4>
+    <ul style="color: #856404; margin-left: 1.5rem; font-size: 0.9rem;">
+        <li><strong>All participants must approve</strong> your query before it executes</li>
+        <li>Participants review queries to ensure <strong>privacy protection</strong></li>
+        <li>Use <strong>aggregation functions</strong> (COUNT, SUM, AVG) to protect individual records</li>
+        <li>Apply <strong>k-anonymity</strong> (HAVING COUNT(*) >= 10) to prevent re-identification</li>
+        <li>Avoid queries that return individual records without anonymization</li>
+    </ul>
+</div>
+{% endblock %}

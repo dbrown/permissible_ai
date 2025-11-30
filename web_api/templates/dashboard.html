@@ -52,7 +52,7 @@
         {% else %}
         <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">View Profile</a>
         {% endif %}
-        <a href="{{ url_for('logout') }}" class="btn btn-secondary">Logout</a>
+        <a href="{{ url_for('auth.logout') }}" class="btn btn-secondary">Logout</a>
     </div>
 </div>
 {% endblock %}

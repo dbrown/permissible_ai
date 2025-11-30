@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Dataset{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 2rem;">
+    <a href="{{ url_for('tee_web.session_detail', session_id=session.id) }}" style="color: #667eea; text-decoration: none;">← Back to {{ session.name }}</a>
+</div>
+
+<h1 style="margin-bottom: 1rem;">Upload Dataset</h1>
+<p style="color: #666; margin-bottom: 2rem;">Prepare your dataset for secure upload with client-side encryption</p>
+
+<form method="POST" style="max-width: 600px;">
+    <div style="margin-bottom: 1.5rem;">
+        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Dataset Name *</label>
+        <input type="text" name="name" required style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;" placeholder="Q4 2024 Patient Records">
+    </div>
+    
+    <div style="margin-bottom: 2rem;">
+        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Description</label>
+        <textarea name="description" rows="3" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;" placeholder="Describe the dataset contents and any important notes..."></textarea>
+    </div>
+    
+    <div style="display: flex; gap: 1rem;">
+        <button type="submit" class="btn btn-primary">Continue to Upload →</button>
+        <a href="{{ url_for('tee_web.session_detail', session_id=session.id) }}" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+
+<div style="background: #fff3cd; padding: 1.5rem; border-radius: 10px; border-left: 4px solid #ffc107; margin-top: 2rem; max-width: 600px;">
+    <h4 style="color: #856404; margin-bottom: 0.5rem;">🔒 Secure Upload Process</h4>
+    <ul style="color: #856404; margin-left: 1.5rem; font-size: 0.9rem;">
+        <li>Your data will be encrypted <strong>in your browser</strong> before upload</li>
+        <li>The web server <strong>never sees</strong> your plaintext data</li>
+        <li>Data is uploaded directly to the Trusted Execution Environment (TEE)</li>
+        <li>You'll verify the TEE's authenticity before uploading</li>
+    </ul>
+</div>
+
+<div style="background: #e7f3ff; padding: 1.5rem; border-radius: 10px; border-left: 4px solid #17a2b8; margin-top: 1.5rem; max-width: 600px;">
+    <h4 style="color: #0c5460; margin-bottom: 0.5rem;">📦 Supported Formats</h4>
+    <ul style="color: #0c5460; margin-left: 1.5rem; font-size: 0.9rem;">
+        <li>CSV files (.csv)</li>
+        <li>JSON files (.json)</li>
+        <li>Parquet files (.parquet)</li>
+        <li>Maximum file size: 100 MB</li>
+    </ul>
+</div>
+{% endblock %}

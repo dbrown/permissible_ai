@@ -43,15 +43,52 @@
 </div>
 {% endif %}
 
+{% if pending_queries %}
+<div style="background: #fff3cd; padding: 1.5rem; border-radius: 10px; border-left: 4px solid #ffc107; margin-bottom: 2rem;">
+    <h3 style="color: #856404; margin-bottom: 1rem;">⏳ Queries Awaiting Your Approval</h3>
+    <p style="color: #856404; margin-bottom: 1rem;">{{ pending_queries|length }} quer{{ 'y' if pending_queries|length == 1 else 'ies' }} need{{ '' if pending_queries|length == 1 else '' }} your review</p>
+    <div style="display: grid; gap: 1rem; margin-bottom: 1rem;">
+        {% for query in pending_queries[:3] %}
+        <div style="background: white; padding: 1rem; border-radius: 5px;">
+            <strong style="color: #667eea;">{{ query.name }}</strong>
+            <p style="color: #666; font-size: 0.85rem; margin: 0.25rem 0;">{{ query.session.name }}</p>
+            <a href="{{ url_for('tee_web.query_detail', query_id=query.id) }}" style="color: #667eea; font-size: 0.85rem; text-decoration: none;">Review Query →</a>
+        </div>
+        {% endfor %}
+    </div>
+    <a href="{{ url_for('tee_web.sessions') }}" class="btn btn-primary">View All Sessions</a>
+</div>
+{% endif %}
+
+{% if user_sessions %}
+<div style="background: #f8f9fa; padding: 1.5rem; border-radius: 10px; margin-bottom: 2rem;">
+    <h3 style="color: #667eea; margin-bottom: 1rem;">📊 Your Collaboration Sessions</h3>
+    <div style="display: grid; gap: 1rem;">
+        {% for session in user_sessions %}
+        <div style="background: white; padding: 1rem; border-radius: 5px; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <strong style="color: #667eea;">{{ session.name }}</strong>
+                <p style="color: #666; font-size: 0.85rem; margin: 0.25rem 0;">
+                    {{ session.participants|length }} participants · {{ session.queries.count() }} queries
+                </p>
+            </div>
+            <a href="{{ url_for('tee_web.session_detail', session_id=session.id) }}" class="btn btn-secondary" style="padding: 0.5rem 1rem;">View</a>
+        </div>
+        {% endfor %}
+    </div>
+    <a href="{{ url_for('tee_web.sessions') }}" style="color: #667eea; text-decoration: none; display: inline-block; margin-top: 1rem;">View all sessions →</a>
+</div>
+{% endif %}
+
 <div style="background: #e7f3ff; padding: 2rem; border-radius: 10px; margin-top: 2rem;">
     <h3 style="color: #667eea; margin-bottom: 1rem;">Quick Actions</h3>
     <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
-        <a href="{{ url_for('api_keys.list_keys') }}" class="btn btn-primary">🔑 Manage API Keys</a>
+        <a href="{{ url_for('tee_web.sessions') }}" class="btn btn-primary">🤝 Collaborations</a>
+        <a href="{{ url_for('tee_web.create_session') }}" class="btn btn-primary">+ New Session</a>
+        <a href="{{ url_for('api_keys.list_keys') }}" class="btn btn-secondary">🔑 API Keys</a>
         {% if current_user.is_admin %}
         <a href="{{ url_for('admin.users') }}" class="btn btn-secondary">Manage Users</a>
         <a href="{{ url_for('admin.requests') }}" class="btn btn-secondary">Admin Requests</a>
-        {% else %}
-        <a href="{{ url_for('main.dashboard') }}" class="btn btn-secondary">View Profile</a>
         {% endif %}
         <a href="{{ url_for('auth.logout') }}" class="btn btn-secondary">Logout</a>
     </div>

@@ -197,6 +197,8 @@
         <nav>
             <ul>
                 <li><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
+                <li><a href="{{ url_for('tee_web.sessions') }}">Collaborations</a></li>
+                <li><a href="{{ url_for('api_keys.list_keys') }}">API Keys</a></li>
                 {% if current_user.is_admin %}
                 <li><a href="{{ url_for('admin.requests') }}">Admin Requests</a></li>
                 <li><a href="{{ url_for('admin.users') }}">Users</a></li>

@@ -15,11 +15,13 @@ class SessionStatus(enum.Enum):
 
 class DatasetStatus(enum.Enum):
     """Dataset upload and processing states"""
-    UPLOADING = 'uploading'
-    UPLOADED = 'uploaded'
-    ENCRYPTED = 'encrypted'
-    AVAILABLE = 'available'
-    ERROR = 'error'
+    PENDING = 'pending'        # Metadata created, waiting for client upload
+    UPLOADING = 'uploading'    # Client is uploading encrypted data to TEE
+    UPLOADED = 'uploaded'      # Upload complete, TEE processing
+    ENCRYPTED = 'encrypted'    # Encrypted at rest in TEE
+    AVAILABLE = 'available'    # Ready for queries
+    FAILED = 'failed'          # Upload or processing failed
+    ERROR = 'error'            # Generic error state
 
 
 class QueryStatus(enum.Enum):
@@ -268,6 +270,28 @@ class Query(db.Model):
         self.completed_at = datetime.utcnow()
         self.execution_time_seconds = execution_time
         db.session.commit()
+    
+    def get_approval_count(self):
+        """Get the number of approvals for this query"""
+        from sqlalchemy import select
+        result = db.session.execute(
+            select(db.func.count()).select_from(query_approvals).where(
+                query_approvals.c.query_id == self.id,
+                query_approvals.c.approved == True
+            )
+        )
+        return result.scalar()
+    
+    def user_has_approved(self, user):
+        """Check if a specific user has approved this query"""
+        result = db.session.execute(
+            db.select(query_approvals).where(
+                query_approvals.c.query_id == self.id,
+                query_approvals.c.user_id == user.id,
+                query_approvals.c.approved == True
+            )
+        )
+        return result.first() is not None
 
 
 class QueryResult(db.Model):

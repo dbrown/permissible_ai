@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Results: {{ query.name }}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 2rem;">
+    <a href="{{ url_for('tee_web.query_detail', query_id=query.id) }}" style="color: #667eea; text-decoration: none;">← Back to Query</a>
+</div>
+
+<h1 style="margin-bottom: 0.5rem;">{{ query.name }}</h1>
+<p style="color: #666; margin-bottom: 2rem;">Query Results</p>
+
+{% if results %}
+    {% for result in results %}
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 10px; margin-bottom: 2rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <div>
+                <h3 style="color: #667eea;">Result Set #{{ loop.index }}</h3>
+                <p style="color: #666; font-size: 0.9rem;">
+                    Generated: {{ result.created_at.strftime('%B %d, %Y at %I:%M %p') }}
+                </p>
+            </div>
+            <div style="text-align: right;">
+                <div style="font-size: 0.9rem; color: #666;">
+                    <strong>Format:</strong> {{ result.result_format|upper }}<br>
+                    <strong>Rows:</strong> {{ result.row_count }}<br>
+                    <strong>Size:</strong> {{ (result.file_size_bytes / 1024)|round(2) }} KB
+                </div>
+            </div>
+        </div>
+        
+        {% if result.result_data %}
+        <div style="overflow-x: auto; margin-bottom: 1rem;">
+            <table style="background: white; border: 1px solid #ddd; width: 100%;">
+                <thead>
+                    <tr style="background: #667eea; color: white;">
+                        {% for col in result.result_data.columns %}
+                        <th style="padding: 1rem; border: 1px solid #ddd; text-align: left;">{{ col }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in result.result_data.rows %}
+                    <tr {% if loop.index % 2 == 0 %}style="background: #f8f9fa;"{% endif %}>
+                        {% for cell in row %}
+                        <td style="padding: 1rem; border: 1px solid #ddd;">
+                            {% if cell is number %}
+                                {% if cell is integer %}
+                                    {{ cell }}
+                                {% else %}
+                                    {{ "%.2f"|format(cell) }}
+                                {% endif %}
+                            {% else %}
+                                {{ cell }}
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Download button placeholder -->
+        <div>
+            <button class="btn btn-secondary" onclick="copyResults({{ loop.index }})" id="copy-btn-{{ loop.index }}">📋 Copy to Clipboard</button>
+        </div>
+        
+        <!-- Hidden data for copying -->
+        <textarea id="result-data-{{ loop.index }}" style="position: absolute; left: -9999px;">
+{{ result.result_data.columns|join('\t') }}
+{% for row in result.result_data.rows %}{{ row|join('\t') }}
+{% endfor %}</textarea>
+        
+        {% else %}
+        <p style="color: #666;">Result data is stored externally. Contact administrator for access.</p>
+        {% endif %}
+    </div>
+    {% endfor %}
+{% else %}
+<div style="background: #fff3cd; padding: 2rem; border-radius: 10px; border-left: 4px solid #ffc107; text-align: center;">
+    <h3 style="color: #856404;">No Results Available</h3>
+    <p style="color: #856404;">This query has not produced results yet.</p>
+</div>
+{% endif %}
+
+<div style="background: #e7f3ff; padding: 1.5rem; border-radius: 10px; border-left: 4px solid #17a2b8; margin-top: 2rem;">
+    <h4 style="color: #0c5460; margin-bottom: 0.5rem;">📊 About These Results</h4>
+    <ul style="color: #0c5460; margin-left: 1.5rem; font-size: 0.9rem;">
+        <li>Results are available to <strong>all session participants</strong></li>
+        <li>Data has been <strong>aggregated</strong> to protect individual privacy</li>
+        <li>Query was approved by all required participants before execution</li>
+        <li>Results are computed in a secure <strong>Trusted Execution Environment</strong></li>
+    </ul>
+</div>
+
+<script>
+function copyResults(index) {
+    const textarea = document.getElementById('result-data-' + index);
+    const button = document.getElementById('copy-btn-' + index);
+    
+    textarea.select();
+    textarea.setSelectionRange(0, 99999); // For mobile devices
+    
+    try {
+        document.execCommand('copy');
+        const originalText = button.textContent;
+        button.textContent = '✓ Copied!';
+        button.style.background = '#28a745';
+        
+        setTimeout(() => {
+            button.textContent = originalText;
+            button.style.background = '';
+        }, 2000);
+    } catch (err) {
+        alert('Failed to copy results');
+    }
+}
+</script>
+{% endblock %}

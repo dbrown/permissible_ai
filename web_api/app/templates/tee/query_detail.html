@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}{{ query.name }}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 2rem;">
+    <a href="{{ url_for('tee_web.session_detail', session_id=query.session_id) }}" style="color: #667eea; text-decoration: none;">← Back to Session</a>
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 2rem;">
+    <div>
+        <h1 style="margin-bottom: 0.5rem;">{{ query.name }}</h1>
+        <p style="color: #666;">{{ query.description or 'No description' }}</p>
+    </div>
+    <span class="badge" style="font-size: 1rem; padding: 0.5rem 1rem; background: 
+        {% if query.status.value == 'completed' %}#28a745
+        {% elif query.status.value == 'rejected' %}#dc3545
+        {% elif query.status.value == 'verifying' %}#ffc107
+        {% elif query.status.value == 'executing' %}#17a2b8
+        {% else %}#6c757d{% endif %}; color: white;">
+        {{ query.status.value|upper }}
+    </span>
+</div>
+
+<!-- Query Info -->
+<div style="background: #f8f9fa; padding: 1.5rem; border-radius: 10px; margin-bottom: 2rem;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 1rem;">
+        <div>
+            <strong style="display: block; color: #667eea; margin-bottom: 0.25rem;">Submitted By</strong>
+            <span>{{ query.submitter.name }}</span>
+        </div>
+        <div>
+            <strong style="display: block; color: #667eea; margin-bottom: 0.25rem;">Privacy Level</strong>
+            <span>{{ query.privacy_level|replace('_', ' ')|title }}</span>
+        </div>
+        <div>
+            <strong style="display: block; color: #667eea; margin-bottom: 0.25rem;">Submitted</strong>
+            <span>{{ query.submitted_at.strftime('%b %d, %Y %I:%M %p') }}</span>
+        </div>
+        {% if query.execution_time_seconds %}
+        <div>
+            <strong style="display: block; color: #667eea; margin-bottom: 0.25rem;">Execution Time</strong>
+            <span>{{ "%.2f"|format(query.execution_time_seconds) }}s</span>
+        </div>
+        {% endif %}
+    </div>
+    
+    {% if accessed_datasets %}
+    <div style="padding-top: 1rem; border-top: 1px solid #ddd;">
+        <strong style="display: block; color: #667eea; margin-bottom: 0.5rem;">Accesses Datasets:</strong>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            {% for dataset in accessed_datasets %}
+            <span style="background: white; padding: 0.5rem 1rem; border-radius: 5px; font-size: 0.9rem;">
+                {{ dataset.name }} ({{ dataset.owner.name }})
+            </span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- SQL Query -->
+<div style="margin-bottom: 2rem;">
+    <h2 style="margin-bottom: 1rem;">SQL Query</h2>
+    <pre style="background: #2d2d2d; color: #f8f8f2; padding: 1.5rem; border-radius: 10px; overflow-x: auto; font-family: 'Courier New', monospace; font-size: 0.9rem;">{{ query.query_text }}</pre>
+</div>
+
+<!-- Approval Status -->
+<div style="margin-bottom: 2rem;">
+    <h2 style="margin-bottom: 1rem;">Approval Status</h2>
+    
+    {% if query.status.value == 'rejected' %}
+    <div style="background: #f8d7da; padding: 1.5rem; border-radius: 10px; border-left: 4px solid #dc3545;">
+        <h3 style="color: #721c24; margin-bottom: 0.5rem;">❌ Query Rejected</h3>
+        <p style="color: #721c24;">{{ query.verification_notes or 'No reason provided' }}</p>
+    </div>
+    {% elif query.status.value == 'completed' %}
+    <div style="background: #d4edda; padding: 1.5rem; border-radius: 10px; border-left: 4px solid #28a745;">
+        <h3 style="color: #155724; margin-bottom: 0.5rem;">✓ Query Approved and Executed</h3>
+        <p style="color: #155724;">All participants approved this query. Results are available below.</p>
+    </div>
+    {% else %}
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3>Participant Approvals ({{ approval_details|selectattr('approved')|list|length }}/{{ query.session.participants|length }})</h3>
+            
+            {% if not user_approved and query.status.value in ['submitted', 'verifying'] %}
+            <div style="display: flex; gap: 0.5rem;">
+                <form method="POST" action="{{ url_for('tee_web.approve_query', query_id=query.id) }}" style="display: inline;">
+                    <input type="text" name="notes" placeholder="Optional approval notes..." style="padding: 0.5rem; border: 1px solid #ddd; border-radius: 5px; width: 250px;">
+                    <button type="submit" class="btn btn-success" style="background: #28a745;">✓ Approve</button>
+                </form>
+                <button onclick="showRejectForm()" class="btn btn-danger">✗ Reject</button>
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Reject Form (hidden by default) -->
+        <div id="reject-form" style="display: none; background: #fff3cd; padding: 1rem; border-radius: 5px; margin-bottom: 1rem;">
+            <form method="POST" action="{{ url_for('tee_web.reject_query', query_id=query.id) }}">
+                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Reason for Rejection:</label>
+                <textarea name="reason" rows="3" required style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 5px; margin-bottom: 0.5rem;"></textarea>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button type="submit" class="btn btn-danger">Confirm Rejection</button>
+                    <button type="button" onclick="hideRejectForm()" class="btn btn-secondary">Cancel</button>
+                </div>
+            </form>
+        </div>
+        
+        <div style="display: grid; gap: 1rem;">
+            {% for participant in query.session.participants %}
+            {% set participant_approval = approval_details|selectattr('user.id', 'equalto', participant.id)|first %}
+            <div style="background: white; padding: 1rem; border-radius: 5px; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <strong>{{ participant.name }}</strong>
+                    {% if participant.id == query.submitter_id %}<span style="color: #667eea; font-size: 0.85rem;">(Submitter)</span>{% endif %}
+                    {% if participant_approval and participant_approval.notes %}
+                    <p style="color: #666; font-size: 0.9rem; margin-top: 0.25rem;">{{ participant_approval.notes }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    {% if participant_approval and participant_approval.approved %}
+                    <span style="color: #28a745; font-weight: 600;">✓ Approved</span>
+                    <span style="color: #999; font-size: 0.85rem; margin-left: 0.5rem;">{{ participant_approval.approved_at.strftime('%b %d, %I:%M %p') }}</span>
+                    {% else %}
+                    <span style="color: #999;">⏳ Pending</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Results -->
+{% if query.status.value == 'completed' and results %}
+<div style="margin-bottom: 2rem;">
+    <h2 style="margin-bottom: 1rem;">Query Results</h2>
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 10px;">
+        <div style="margin-bottom: 1rem;">
+            <strong>Format:</strong> {{ results.result_format|upper }} | 
+            <strong>Rows:</strong> {{ results.row_count }} | 
+            <strong>Size:</strong> {{ (results.file_size_bytes / 1024)|round(2) }} KB
+        </div>
+        
+        {% if results.result_data %}
+        <div style="overflow-x: auto;">
+            <table style="background: white; border: 1px solid #ddd;">
+                <thead>
+                    <tr style="background: #667eea; color: white;">
+                        {% for col in results.result_data.columns %}
+                        <th style="padding: 0.75rem; border: 1px solid #ddd;">{{ col }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in results.result_data.rows %}
+                    <tr>
+                        {% for cell in row %}
+                        <td style="padding: 0.75rem; border: 1px solid #ddd;">{{ cell }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endif %}
+        
+        <div style="margin-top: 1rem;">
+            <a href="{{ url_for('tee_web.query_results', query_id=query.id) }}" class="btn btn-primary">View Full Results</a>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+function showRejectForm() {
+    document.getElementById('reject-form').style.display = 'block';
+}
+
+function hideRejectForm() {
+    document.getElementById('reject-form').style.display = 'none';
+}
+</script>
+{% endblock %}

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Collaboration Sessions{% endblock %}
+
+{% block content %}
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1>Collaboration Sessions</h1>
+    <a href="{{ url_for('tee_web.create_session') }}" class="btn btn-primary">+ New Session</a>
+</div>
+
+{% if sessions %}
+<div style="display: grid; gap: 1.5rem;">
+    {% for session in sessions %}
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 10px; border-left: 4px solid {% if session.status.value == 'active' %}#28a745{% elif session.status.value == 'suspended' %}#ffc107{% else %}#6c757d{% endif %};">
+        <div style="display: flex; justify-content: space-between; align-items: start;">
+            <div style="flex: 1;">
+                <h3 style="margin-bottom: 0.5rem;">
+                    <a href="{{ url_for('tee_web.session_detail', session_id=session.id) }}" style="color: #667eea; text-decoration: none;">
+                        {{ session.name }}
+                    </a>
+                </h3>
+                <p style="color: #666; margin-bottom: 1rem;">{{ session.description or 'No description' }}</p>
+                
+                <div style="display: flex; gap: 2rem; flex-wrap: wrap; font-size: 0.9rem; color: #666;">
+                    <div>
+                        <strong>Status:</strong>
+                        <span class="badge {% if session.status.value == 'active' %}badge-admin{% elif session.status.value == 'suspended' %}badge-pending{% endif %}" style="margin-left: 0.5rem;">
+                            {{ session.status.value|upper }}
+                        </span>
+                    </div>
+                    <div>
+                        <strong>Creator:</strong> {{ session.creator.name }}
+                    </div>
+                    <div>
+                        <strong>Participants:</strong> {{ session.participants|length }}
+                    </div>
+                    <div>
+                        <strong>Datasets:</strong> {{ session.datasets.count() }}
+                    </div>
+                    <div>
+                        <strong>Queries:</strong> {{ session.queries.count() }}
+                    </div>
+                    <div>
+                        <strong>Created:</strong> {{ session.created_at.strftime('%b %d, %Y') }}
+                    </div>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 0.5rem;">
+                <a href="{{ url_for('tee_web.session_detail', session_id=session.id) }}" class="btn btn-secondary" style="padding: 0.5rem 1rem;">View</a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div style="text-align: center; padding: 4rem 2rem; background: #f8f9fa; border-radius: 10px;">
+    <h3 style="color: #667eea; margin-bottom: 1rem;">No Collaboration Sessions Yet</h3>
+    <p style="color: #666; margin-bottom: 2rem;">Create your first collaboration session to start secure multi-party data analysis</p>
+    <a href="{{ url_for('tee_web.create_session') }}" class="btn btn-primary">Create Your First Session</a>
+</div>
+{% endif %}
+
+<div style="background: #e7f3ff; padding: 1.5rem; border-radius: 10px; margin-top: 2rem;">
+    <h3 style="color: #667eea; margin-bottom: 1rem;">💡 About Collaboration Sessions</h3>
+    <p style="color: #666; margin-bottom: 0.5rem;">Collaboration sessions enable secure multi-party data analysis using Trusted Execution Environments (TEE). Multiple participants can:</p>
+    <ul style="color: #666; margin-left: 1.5rem;">
+        <li>Upload encrypted datasets that remain private</li>
+        <li>Submit queries to analyze combined data</li>
+        <li>Review and approve queries before execution</li>
+        <li>Access aggregated results without seeing raw data</li>
+    </ul>
+</div>
+{% endblock %}

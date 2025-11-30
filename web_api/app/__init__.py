@@ -39,7 +39,7 @@ def create_app(config_name='default'):
         return User.query.get(int(user_id))
     
     # Register blueprints
-    from app.routes import auth, main, admin, api_keys, api, tee
+    from app.routes import auth, main, admin, api_keys, api, tee, tee_web, tee_callbacks
     
     app.register_blueprint(auth.bp)
     app.register_blueprint(main.bp)
@@ -47,6 +47,8 @@ def create_app(config_name='default'):
     app.register_blueprint(api_keys.bp)
     app.register_blueprint(api.bp)
     app.register_blueprint(tee.bp)
+    app.register_blueprint(tee_web.bp)
+    app.register_blueprint(tee_callbacks.bp)
     
     # Create database tables
     with app.app_context():
