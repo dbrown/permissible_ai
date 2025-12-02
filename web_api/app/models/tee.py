@@ -139,6 +139,8 @@ class Dataset(db.Model):
     gcs_path = db.Column(db.String(500))
     encrypted_path = db.Column(db.String(500))
     encryption_key_id = db.Column(db.String(255))  # KMS key ID
+    csv_content = db.Column(db.Text)  # Store CSV file content for local execution
+    sqlite_table_name = db.Column(db.String(255))  # Table name in session SQLite database
     
     # Metadata
     file_size_bytes = db.Column(db.BigInteger)

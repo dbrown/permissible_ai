@@ -18,7 +18,7 @@ NC='\033[0m' # No Color
 PROJECT_ID="${GOOGLE_CLOUD_PROJECT:-}"
 ZONE="${GCP_ZONE:-us-central1-a}"
 INSTANCE_NAME="shared-tee-dev"
-MACHINE_TYPE="n2d-standard-2"  # AMD SEV-SNP for confidential computing
+MACHINE_TYPE="n2d-standard-2"  # Smallest AMD instance supporting SEV (2 vCPU, 8GB RAM)
 SERVICE_ACCOUNT="${TEE_SERVICE_ACCOUNT:-}"
 NETWORK="${GCP_NETWORK:-default}"
 
@@ -82,6 +82,25 @@ fi
 
 # Create startup script
 echo -e "${YELLOW}Creating TEE startup script...${NC}"
+
+# First, prepare the code files to embed
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKERS_DIR="$(cd "$SCRIPT_DIR/../../workers" && pwd)"
+
+if [ ! -f "$WORKERS_DIR/tee_server.py" ]; then
+    echo -e "${RED}ERROR: tee_server.py not found at $WORKERS_DIR${NC}"
+    exit 1
+fi
+
+if [ ! -f "$WORKERS_DIR/query_executor.py" ]; then
+    echo -e "${RED}ERROR: query_executor.py not found at $WORKERS_DIR${NC}"
+    exit 1
+fi
+
+# Base64 encode the Python files for safe embedding
+TEE_SERVER_B64=$(base64 < "$WORKERS_DIR/tee_server.py")
+QUERY_EXECUTOR_B64=$(base64 < "$WORKERS_DIR/query_executor.py")
+
 cat > /tmp/tee-startup.sh << 'STARTUP_SCRIPT_EOF'
 #!/bin/bash
 set -e
@@ -91,16 +110,31 @@ echo "Starting at: $(date)"
 
 # Update system
 apt-get update
-apt-get install -y python3-pip python3-venv postgresql-client curl jq
-
-# Disable SSH for security (TEE should not allow remote shell access)
-systemctl stop ssh
-systemctl disable ssh
-echo "SSH disabled for TEE security" > /etc/ssh/sshd_not_to_be_run
+apt-get install -y python3-pip python3-venv curl jq
 
 # Create TEE runtime directory
 mkdir -p /opt/tee-runtime
+mkdir -p /opt/tee-data
+chmod 700 /opt/tee-data
+
 cd /opt/tee-runtime
+
+# Write Python files from base64-encoded content
+STARTUP_SCRIPT_EOF
+
+# Append base64-encoded content and decode commands
+cat >> /tmp/tee-startup.sh << STARTUP_SCRIPT_EOF
+cat > tee_server.py.b64 << 'TEE_SERVER_B64_EOF'
+$TEE_SERVER_B64
+TEE_SERVER_B64_EOF
+
+cat > query_executor.py.b64 << 'QUERY_EXECUTOR_B64_EOF'
+$QUERY_EXECUTOR_B64
+QUERY_EXECUTOR_B64_EOF
+
+base64 -d tee_server.py.b64 > tee_server.py
+base64 -d query_executor.py.b64 > query_executor.py
+rm tee_server.py.b64 query_executor.py.b64
 
 # Create Python virtual environment
 python3 -m venv venv
@@ -108,335 +142,16 @@ source venv/bin/activate
 
 # Install dependencies
 pip install --upgrade pip
-pip install flask flask-cors gunicorn sqlalchemy psycopg2-binary pandas pyarrow google-cloud-storage google-cloud-kms pyjwt cryptography requests
+pip install flask flask-cors cryptography pyjwt requests
 
-# Create attestation service
-cat > attestation_service.py << 'ATTESTATION_EOF'
-"""
-Shared TEE Attestation Service
+# Create secure data directory
+mkdir -p /opt/tee-data
+chmod 700 /opt/tee-data
 
-Provides attestation tokens and handles query execution
-for multiple collaboration sessions.
-"""
-import os
-import json
-import jwt
-import logging
-from datetime import datetime, timedelta
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-
-app = Flask(__name__)
-
-# Configure CORS to allow requests from web applications
-CORS(app, resources={
-    r"/*": {
-        "origins": "*",
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type", "Authorization"],
-        "max_age": 3600
-    }
-})
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-# Get instance metadata
-def get_instance_metadata(key):
-    """Fetch instance metadata from GCE metadata server"""
-    try:
-        import requests
-        metadata_server = "http://metadata.google.internal/computeMetadata/v1"
-        headers = {"Metadata-Flavor": "Google"}
-        response = requests.get(f"{metadata_server}/{key}", headers=headers)
-        return response.text
-    except Exception as e:
-        logger.error(f"Failed to get metadata {key}: {e}")
-        return None
-
-def compute_runtime_hash():
-    """Compute cryptographic hash of all runtime files for integrity verification"""
-    import hashlib
-    
-    files_to_hash = [
-        '/opt/tee-runtime/attestation_service.py',
-        '/etc/systemd/system/tee-attestation.service'
-    ]
-    
-    hashes = {}
-    combined = ""
-    
-    for filepath in files_to_hash:
-        try:
-            if os.path.exists(filepath):
-                with open(filepath, 'rb') as f:
-                    file_content = f.read()
-                    file_hash = hashlib.sha256(file_content).hexdigest()
-                    hashes[filepath] = f"sha256:{file_hash}"
-                    combined += file_hash
-        except Exception as e:
-            logger.warning(f"Could not hash {filepath}: {e}")
-    
-    # Combined hash of all files
-    runtime_hash = hashlib.sha256(combined.encode()).hexdigest()
-    
-    return {
-        'runtime_hash': f"sha256:{runtime_hash}",
-        'files': hashes,
-        'timestamp': datetime.utcnow().isoformat()
-    }
-
-@app.route('/health', methods=['GET'])
-def health():
-    """Health check endpoint"""
-    return jsonify({
-        'status': 'healthy',
-        'timestamp': datetime.utcnow().isoformat(),
-        'service': 'shared-tee-attestation'
-    })
-
-@app.route('/runtime-hash', methods=['GET'])
-def get_runtime_hash():
-    """Get cryptographic hash of runtime code for integrity verification"""
-    try:
-        return jsonify(compute_runtime_hash())
-    except Exception as e:
-        logger.error(f"Failed to compute runtime hash: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/attestation', methods=['GET'])
-def get_attestation():
-    """Generate attestation token for this TEE instance"""
-    try:
-        # Get instance metadata
-        instance_id = get_instance_metadata('instance/id')
-        instance_name = get_instance_metadata('instance/name')
-        zone = get_instance_metadata('instance/zone')
-        project = get_instance_metadata('project/project-id')
-        
-        # Check confidential computing features
-        # In real implementation, verify SEV-SNP attestation report
-        confidential_enabled = True  # Verify from SEV report
-        
-        # Compute runtime hash for integrity verification
-        runtime_info = compute_runtime_hash()
-        
-        # Create attestation claims
-        claims = {
-            'iss': 'gcp-confidential-vm',
-            'sub': 'shared-tee-service',
-            'iat': datetime.utcnow(),
-            'exp': datetime.utcnow() + timedelta(hours=1),
-            'instance_id': instance_id,
-            'instance_name': instance_name,
-            'zone': zone,
-            'project': project,
-            'confidential_computing': confidential_enabled,
-            'secure_boot': True,
-            'vtpm_enabled': True,
-            'runtime_version': '1.0.0',
-            'runtime_hash': runtime_info['runtime_hash'],
-            'file_hashes': runtime_info['files']
-        }
-        
-        # Sign token (in production, use instance private key)
-        # For development, using symmetric key - REPLACE IN PRODUCTION
-        secret_key = os.getenv('ATTESTATION_SECRET', 'dev-secret-change-in-production')
-        token = jwt.encode(claims, secret_key, algorithm='HS256')
-        
-        logger.info(f"Generated attestation token for instance {instance_id}")
-        
-        return jsonify({
-            'attestation_token': token,
-            'instance_id': instance_id,
-            'instance_name': instance_name,
-            'zone': zone,
-            'timestamp': datetime.utcnow().isoformat(),
-            'verified': True
-        })
-        
-    except Exception as e:
-        logger.error(f"Failed to generate attestation: {e}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/upload', methods=['POST', 'OPTIONS'])
-def upload_dataset():
-    """
-    Receive encrypted dataset directly from client browser
-    
-    For development: accepts uploads but returns success without processing
-    In production: decrypt with TEE private key and re-encrypt with session key
-    """
-    if request.method == 'OPTIONS':
-        # Handle CORS preflight
-        return '', 200
-        
-    try:
-        # Verify authorization
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({'error': 'Missing authorization token'}), 401
-        
-        data = request.json
-        dataset_id = data.get('dataset_id')
-        session_id = data.get('session_id')
-        
-        logger.info(f"Received upload for dataset {dataset_id}, session {session_id}")
-        logger.info(f"Encrypted data size: {len(data.get('encrypted_data', ''))} bytes (base64)")
-        
-        # For development: just acknowledge receipt
-        # In production: decrypt with TEE private key, re-encrypt with session key
-        
-        # Notify control plane that dataset is available
-        try:
-            import requests
-            control_plane_url = os.getenv('CONTROL_PLANE_URL', 'http://localhost:5000')
-            callback_payload = {
-                'entity_type': 'dataset',
-                'entity_id': dataset_id,
-                'status': 'available',
-                'metadata': {
-                    'checksum': 'mock-checksum-dev',
-                    'file_size': data.get('file_size', 0)
-                },
-                'timestamp': datetime.utcnow().isoformat()
-            }
-            requests.post(
-                f"{control_plane_url}/api/tee/callback",
-                json=callback_payload,
-                timeout=5
-            )
-            logger.info(f"Notified control plane: dataset {dataset_id} available")
-        except Exception as e:
-            logger.error(f"Failed to notify control plane: {e}")
-            # Don't fail the upload if callback fails
-        
-        return jsonify({
-            'status': 'success',
-            'dataset_id': dataset_id,
-            'message': 'Dataset received and stored in TEE',
-            'checksum': 'mock-checksum-dev'
-        })
-        
-    except Exception as e:
-        logger.error(f"Upload failed: {e}", exc_info=True)
-        return jsonify({'error': f'Upload failed: {str(e)}'}), 500
-
-@app.route('/execute-query', methods=['POST'])
-def execute_query():
-    """Execute a query in isolated environment"""
-    try:
-        data = request.get_json()
-        
-        query_id = data.get('query_id')
-        session_id = data.get('session_id')
-        query_text = data.get('query_text')
-        dataset_paths = data.get('dataset_paths', [])
-        
-        logger.info(f"Executing query {query_id} for session {session_id}")
-        
-        # In production, execute query in isolated container/process
-        # For development, return mock results
-        mock_results = {
-            'query_id': query_id,
-            'session_id': session_id,
-            'status': 'completed',
-            'results': {
-                'columns': ['diagnosis_code', 'total_cases', 'readmissions', 'readmission_rate'],
-                'rows': [
-                    ['DX001', 150, 23, 15.33],
-                    ['DX002', 98, 12, 12.24],
-                    ['DX003', 76, 8, 10.53]
-                ]
-            },
-            'execution_time': 1.23,
-            'timestamp': datetime.utcnow().isoformat()
-        }
-        
-        return jsonify(mock_results)
-        
-    except Exception as e:
-        logger.error(f"Query execution failed: {e}")
-        return jsonify({'error': str(e), 'status': 'error'}), 500
-
-@app.route('/status', methods=['GET'])
-def status():
-    """Get TEE service status and metrics"""
-    try:
-        instance_id = get_instance_metadata('instance/id')
-        
-        # Check for SSH access in auth logs
-        ssh_warning = None
-        try:
-            import subprocess
-            result = subprocess.run(
-                ['journalctl', '-u', 'sshd', '--since', '1 hour ago', '--no-pager'],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            if 'Accepted' in result.stdout or 'session opened' in result.stdout:
-                ssh_warning = "SSH access detected in last hour - users should verify integrity"
-        except Exception as e:
-            logger.warning(f"Could not check SSH logs: {e}")
-        
-        status_info = {
-            'service': 'shared-tee',
-            'status': 'running',
-            'instance_id': instance_id,
-            'timestamp': datetime.utcnow().isoformat()
-        }
-        
-        if ssh_warning:
-            status_info['warning'] = ssh_warning
-            
-        return jsonify(status_info)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/audit-events', methods=['GET'])
-def audit_events():
-    """Get recent audit events for transparency"""
-    try:
-        import subprocess
-        
-        # Get SSH login attempts
-        ssh_result = subprocess.run(
-            ['journalctl', '-u', 'sshd', '-n', '50', '--no-pager', '-o', 'json'],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        
-        # Get service restarts
-        service_result = subprocess.run(
-            ['journalctl', '-u', 'tee-attestation', '-n', '50', '--no-pager', '-o', 'json'],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        
-        events = {
-            'ssh_events': ssh_result.stdout if ssh_result.returncode == 0 else [],
-            'service_events': service_result.stdout if service_result.returncode == 0 else [],
-            'timestamp': datetime.utcnow().isoformat(),
-            'note': 'Full audit logs available in Cloud Logging'
-        }
-        
-        return jsonify(events)
-    except Exception as e:
-        logger.error(f"Failed to get audit events: {e}")
-        return jsonify({'error': str(e)}), 500
-
-if __name__ == '__main__':
-    port = int(os.getenv('PORT', 8080))
-    app.run(host='0.0.0.0', port=port, debug=False)
-ATTESTATION_EOF
-
-# Create systemd service
-cat > /etc/systemd/system/tee-attestation.service << 'SERVICE_EOF'
+# Create systemd service placeholder (will be updated after code copy)
+cat > /etc/systemd/system/tee-server.service << 'SERVICE_EOF'
 [Unit]
-Description=Shared TEE Attestation Service
+Description=TEE Server with SQLite Query Execution
 After=network.target
 
 [Service]
@@ -444,8 +159,10 @@ Type=simple
 User=root
 WorkingDirectory=/opt/tee-runtime
 Environment="PATH=/opt/tee-runtime/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-Environment="PORT=8080"
-ExecStart=/opt/tee-runtime/venv/bin/python3 /opt/tee-runtime/attestation_service.py
+Environment="TEE_PORT=8080"
+Environment="TEE_DATA_DIR=/opt/tee-data"
+Environment="CONTROL_PLANE_URL=http://localhost:5000"
+ExecStart=/opt/tee-runtime/venv/bin/python3 /opt/tee-runtime/tee_server.py
 Restart=always
 RestartSec=10
 
@@ -455,26 +172,18 @@ SERVICE_EOF
 
 # Enable and start service
 systemctl daemon-reload
-systemctl enable tee-attestation.service
-systemctl start tee-attestation.service
+systemctl enable tee-server.service
+systemctl start tee-server.service
 
-# Wait for service to start
-sleep 5
+echo "✓ TEE server started"
 
-# Check service status
-if systemctl is-active --quiet tee-attestation.service; then
-    echo "✓ TEE Attestation Service started successfully"
-    
-    # Test the service
-    curl -s http://localhost:8080/health | jq . || echo "Health check response received"
-else
-    echo "✗ Failed to start TEE Attestation Service"
-    systemctl status tee-attestation.service
-    exit 1
-fi
+# Disable SSH for security (TEE should not allow remote shell access)
+systemctl stop ssh
+systemctl disable ssh
+echo "SSH disabled for TEE security" > /etc/ssh/sshd_not_to_be_run
 
 echo "=== TEE Runtime Setup Complete ==="
-echo "Completed at: $(date)"
+echo "Completed at: \$(date)"
 STARTUP_SCRIPT_EOF
 
 echo -e "${GREEN}✓ Startup script created${NC}"
@@ -515,9 +224,18 @@ echo ""
 echo -e "${GREEN}✓ VM created successfully${NC}"
 echo ""
 
-# Wait for VM to be ready
-echo -e "${YELLOW}Waiting for VM to be ready (this may take 2-3 minutes)...${NC}"
-sleep 30
+# Wait for startup script to complete
+echo -e "${YELLOW}Waiting for startup script to complete (2-3 minutes)...${NC}"
+echo "The startup script will:"
+echo "  - Install dependencies"
+echo "  - Deploy TEE code (embedded in startup script)"
+echo "  - Start the service"
+echo "  - Disable SSH for security"
+echo ""
+echo "Waiting 120 seconds..."
+sleep 120
+
+echo ""
 
 # Get external IP
 EXTERNAL_IP=$(gcloud compute instances describe "$INSTANCE_NAME" \
@@ -546,13 +264,13 @@ echo ""
 echo "2. Set environment variable in your Flask app:"
 echo "   export TEE_SERVICE_ENDPOINT=http://${EXTERNAL_IP}:8080"
 echo ""
-echo "3. Test the attestation endpoint:"
+echo "3. Test the service endpoint:"
 echo "   curl http://${EXTERNAL_IP}:8080/health"
-echo "   curl http://${EXTERNAL_IP}:8080/attestation"
 echo ""
-echo "4. SSH into the VM to check logs:"
-echo "   gcloud compute ssh $INSTANCE_NAME --zone=$ZONE"
-echo "   sudo journalctl -u tee-attestation -f"
+echo "4. View startup script logs (SSH will be disabled after setup):"
+echo "   gcloud compute instances get-serial-port-output $INSTANCE_NAME --zone=$ZONE"
+echo ""
+echo "Note: SSH is disabled on the TEE for security. Use serial console for debugging."
 echo ""
 echo "5. Verify confidential computing:"
 echo "   gcloud compute instances describe $INSTANCE_NAME --zone=$ZONE \\"

@@ -63,6 +63,10 @@ DATASETS = {}  # dataset_id -> encrypted data storage
 # Callback configuration
 CONTROL_PLANE_URL = os.getenv('CONTROL_PLANE_URL', 'http://localhost:5000')
 
+# Import query executor for SQLite-based query execution
+from query_executor import QueryExecutor
+QUERY_EXECUTOR = None  # Initialized at startup
+
 
 def load_tee_keypair():
     """
@@ -241,13 +245,16 @@ def upload_dataset():
     {
         "dataset_id": 123,
         "session_id": 456,
-        "encrypted_data": "base64...",  # AES-GCM encrypted
+        "dataset_name": "customer_data",
+        "encrypted_data": "base64...",  # AES-GCM encrypted CSV file
         "encrypted_key": "base64...",    # RSA-OAEP encrypted AES key
         "iv": "base64...",
         "algorithm": "AES-256-GCM",
         "filename": "data.csv",
         "file_size": 1024
     }
+    
+    Note: Only CSV files with headers are supported.
     """
     try:
         # Verify upload token
@@ -262,11 +269,14 @@ def upload_dataset():
         data = request.json
         dataset_id = data['dataset_id']
         session_id = data['session_id']
+        dataset_name = data.get('dataset_name', f'dataset_{dataset_id}')
         
         logger.info(f"Receiving encrypted upload for dataset {dataset_id}, session {session_id}")
         
         # Decrypt AES key using TEE private key
         encrypted_key = base64.b64decode(data['encrypted_key'])
+        logger.info(f"Encrypted key length: {len(encrypted_key)} bytes (expected 512 for 4096-bit RSA)")
+        
         aes_key = TEE_PRIVATE_KEY.decrypt(
             encrypted_key,
             padding.OAEP(
@@ -285,7 +295,41 @@ def upload_dataset():
         
         logger.info(f"Successfully decrypted {len(plaintext_data)} bytes")
         
-        # Re-encrypt with session-specific key
+        # Decode as CSV text
+        try:
+            csv_content = plaintext_data.decode('utf-8')
+        except UnicodeDecodeError:
+            raise ValueError("Dataset must be a valid UTF-8 encoded CSV file")
+        
+        # Validate CSV has header
+        import csv
+        import io
+        csv_reader = csv.reader(io.StringIO(csv_content))
+        try:
+            header = next(csv_reader)
+            if not header or len(header) == 0:
+                raise ValueError("CSV file must have a header row")
+            
+            # Check for at least one data row
+            first_row = next(csv_reader, None)
+            if first_row is None:
+                raise ValueError("CSV file must contain at least one data row")
+                
+            logger.info(f"CSV validated: {len(header)} columns")
+        except StopIteration:
+            raise ValueError("CSV file is empty or malformed")
+        except csv.Error as e:
+            raise ValueError(f"Invalid CSV format: {str(e)}")
+        
+        # Load CSV into session's SQLite database
+        load_result = QUERY_EXECUTOR.load_dataset(
+            session_id=session_id,
+            dataset_id=dataset_id,
+            dataset_name=dataset_name,
+            csv_content=csv_content
+        )
+        
+        # Re-encrypt with session-specific key for backup storage
         session_key = get_or_create_session_key(session_id)
         session_iv = os.urandom(12)
         session_aesgcm = AESGCM(session_key)
@@ -299,23 +343,44 @@ def upload_dataset():
             'filename': data['filename'],
             'file_size': data['file_size'],
             'uploaded_at': datetime.utcnow().isoformat(),
-            'checksum': hashlib.sha256(plaintext_data).hexdigest()
+            'checksum': hashlib.sha256(plaintext_data).hexdigest(),
+            'table_name': load_result['table_name'],
+            'row_count': load_result['row_count']
         }
         
-        logger.info(f"Dataset {dataset_id} stored securely in TEE")
+        logger.info(
+            f"Dataset {dataset_id} stored securely in TEE and loaded into SQLite: "
+            f"{load_result['table_name']} with {load_result['row_count']} rows"
+        )
         
         # Notify control plane of successful upload
         notify_control_plane(dataset_id, 'available', {
             'checksum': DATASETS[dataset_id]['checksum'],
-            'file_size': data['file_size']
+            'file_size': data['file_size'],
+            'table_name': load_result['table_name'],
+            'row_count': load_result['row_count'],
+            'schema': {
+                'columns': [
+                    {'name': orig, 'sanitized_name': sanitized}
+                    for orig, sanitized in load_result['columns']
+                ]
+            }
         })
         
         return jsonify({
             'status': 'success',
             'dataset_id': dataset_id,
             'checksum': DATASETS[dataset_id]['checksum'],
-            'message': 'Dataset encrypted and stored securely in TEE'
+            'table_name': load_result['table_name'],
+            'row_count': load_result['row_count'],
+            'message': 'Dataset encrypted, validated, and loaded into secure SQLite database'
         })
+        
+    except ValueError as e:
+        logger.error(f"Validation failed: {e}")
+        if 'dataset_id' in locals():
+            notify_control_plane(dataset_id, 'failed', {'error': str(e)})
+        return jsonify({'error': str(e)}), 400
         
     except Exception as e:
         logger.error(f"Upload failed: {e}", exc_info=True)
@@ -330,61 +395,67 @@ def upload_dataset():
 @app.route('/execute', methods=['POST'])
 def execute_query():
     """
-    Execute approved query on encrypted datasets
+    Execute approved query on datasets in SQLite
     
-    This runs inside the TEE with strict isolation
+    This runs inside the TEE with strict isolation.
+    Queries are executed against the session's SQLite database.
     """
     try:
         data = request.json
         query_id = data['query_id']
         session_id = data['session_id']
         query_text = data['query_text']
-        dataset_ids = data['dataset_ids']
+        dataset_ids = data.get('dataset_ids', [])
         
         logger.info(f"Executing query {query_id} on session {session_id}")
         
         # Verify all datasets belong to this session
-        session_key = SESSION_KEYS.get(session_id)
-        if not session_key:
-            return jsonify({'error': 'Session key not found'}), 404
-        
-        # Decrypt datasets
-        dataframes = []
         for dataset_id in dataset_ids:
             dataset = DATASETS.get(dataset_id)
             if not dataset or dataset['session_id'] != session_id:
                 return jsonify({'error': f'Dataset {dataset_id} not found or unauthorized'}), 403
-            
-            # Decrypt with session key
-            aesgcm = AESGCM(session_key)
-            plaintext = aesgcm.decrypt(dataset['iv'], dataset['encrypted_data'], None)
-            
-            # In production: load into pandas/DuckDB
-            # For now, just log
-            logger.info(f"Decrypted dataset {dataset_id}: {len(plaintext)} bytes")
         
-        # Execute query (simplified - would use DuckDB or similar)
-        # IMPORTANT: Query execution must be sandboxed to prevent data exfiltration
+        # Execute query in SQLite database
+        execution_result = QUERY_EXECUTOR.execute_query(
+            session_id=session_id,
+            query_text=query_text,
+            timeout=30
+        )
         
+        # Format results
         result_data = {
             'query_id': query_id,
-            'status': 'success',
-            'row_count': 0,  # Placeholder
+            'status': 'completed',
+            'columns': execution_result['columns'],
+            'rows': execution_result['rows'],
+            'row_count': execution_result['row_count'],
+            'execution_time': execution_result['execution_time'],
             'executed_at': datetime.utcnow().isoformat()
         }
         
-        # Encrypt results for requester only
-        # ... encryption logic ...
+        logger.info(
+            f"Query {query_id} executed: {execution_result['row_count']} rows "
+            f"in {execution_result['execution_time']:.3f}s"
+        )
         
+        # Notify control plane with results
         notify_control_plane(query_id, 'completed', result_data, is_query=True)
         
         return jsonify({
             'status': 'success',
-            'query_id': query_id
+            'query_id': query_id,
+            'row_count': execution_result['row_count'],
+            'execution_time': execution_result['execution_time']
         })
+        
+    except ValueError as e:
+        logger.error(f"Query validation failed: {e}")
+        notify_control_plane(query_id, 'failed', {'error': str(e)}, is_query=True)
+        return jsonify({'error': str(e)}), 400
         
     except Exception as e:
         logger.error(f"Query execution failed: {e}", exc_info=True)
+        notify_control_plane(query_id, 'failed', {'error': str(e)}, is_query=True)
         return jsonify({'error': str(e)}), 500
 
 
@@ -412,10 +483,16 @@ def notify_control_plane(entity_id: int, status: str, metadata: Dict[str, Any], 
         
         # In production, sign this callback with TEE private key
         response = requests.post(endpoint, json=payload, timeout=5)
+        response.raise_for_status()
         logger.info(f"Notified control plane: {status} for {'query' if is_query else 'dataset'} {entity_id}")
         
     except Exception as e:
-        logger.error(f"Failed to notify control plane: {e}")
+        # In development with localhost control plane, browser handles the callback
+        # This is expected when running locally
+        if 'localhost' in CONTROL_PLANE_URL or '127.0.0.1' in CONTROL_PLANE_URL:
+            logger.info(f"Control plane callback skipped (localhost URL): Browser will handle callback")
+        else:
+            logger.warning(f"Failed to notify control plane: {e}")
         # Don't fail the operation if callback fails
 
 
@@ -423,6 +500,11 @@ if __name__ == '__main__':
     logger.info("=" * 80)
     logger.info("Starting TEE Server in Confidential VM")
     logger.info("=" * 80)
+    
+    # Initialize query executor for SQLite databases
+    data_dir = os.getenv('TEE_DATA_DIR', '/opt/tee-data')
+    QUERY_EXECUTOR = QueryExecutor(data_dir=data_dir)
+    logger.info(f"Query executor initialized with data directory: {data_dir}")
     
     # Load keypair from image
     public_key_pem = load_tee_keypair()

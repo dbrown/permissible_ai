@@ -123,10 +123,13 @@
             
             const attestation = await response.json();
             
-            // For now, we'll work with the existing TEE format which doesn't expose a public key
-            // In the real implementation, we'd extract the public key from the attestation
-            // For demo purposes, we'll just mark it as verified and allow file upload
-            teePublicKey = 'DEMO_MODE'; // Placeholder
+            // Extract the real PEM public key from the attestation response
+            if (attestation && attestation.attestation && attestation.attestation.public_key) {
+                teePublicKey = attestation.attestation.public_key;
+                console.log('[TEE Upload] Using TEE public key:', teePublicKey);
+            } else {
+                throw new Error('TEE attestation response did not include a public key.');
+            }
             
             // In production, verify:
             // 1. Attestation signature chain (JWT verification)
@@ -217,18 +220,74 @@
             data
         );
         
-        // Export AES key
+        // Export AES key as raw bytes
         const exportedKey = await crypto.subtle.exportKey('raw', aesKey);
         
-        // For demo: In production, encrypt AES key with RSA public key
-        // For now, we'll send it as-is (this is the mock part)
+        // Import TEE's RSA public key
+        const rsaPublicKey = await importRSAPublicKey(publicKeyPem);
+        
+        // Encrypt AES key with RSA-OAEP
+        const encryptedAESKey = await crypto.subtle.encrypt(
+            {
+                name: 'RSA-OAEP'
+            },
+            rsaPublicKey,
+            exportedKey
+        );
         
         return {
             encrypted_data: arrayBufferToBase64(encryptedData),
-            encrypted_key: arrayBufferToBase64(exportedKey),
+            encrypted_key: arrayBufferToBase64(encryptedAESKey),
             iv: arrayBufferToBase64(iv),
             algorithm: 'AES-256-GCM'
         };
+    }
+    
+    // Import RSA public key from PEM format
+    async function importRSAPublicKey(pemKey) {
+        // Remove PEM header/footer and all non-base64 characters
+        let pemContents = pemKey
+            .replace(/-----BEGIN PUBLIC KEY-----/g, '')
+            .replace(/-----END PUBLIC KEY-----/g, '')
+            .replace(/[^A-Za-z0-9+/=]/g, '') // Only base64 chars
+            .trim();
+
+        // Log PEM for debugging
+        console.log('[TEE Upload] Cleaned PEM contents:', pemContents);
+
+        // Validate base64 length (should be multiple of 4)
+        if (pemContents.length % 4 !== 0) {
+            pemContents = pemContents.padEnd(pemContents.length + (4 - (pemContents.length % 4)), '=');
+        }
+
+        let binaryDer;
+        try {
+            binaryDer = atob(pemContents);
+        } catch (e) {
+            console.error('[TEE Upload] atob failed for PEM:', pemContents, e);
+            throw new Error('Invalid PEM format: failed base64 decode');
+        }
+        const bytes = new Uint8Array(binaryDer.length);
+        for (let i = 0; i < binaryDer.length; i++) {
+            bytes[i] = binaryDer.charCodeAt(i);
+        }
+
+        // Import as RSA-OAEP key
+        try {
+            return await crypto.subtle.importKey(
+                'spki',
+                bytes.buffer,
+                {
+                    name: 'RSA-OAEP',
+                    hash: 'SHA-256'
+                },
+                false,
+                ['encrypt']
+            );
+        } catch (e) {
+            console.error('[TEE Upload] importKey failed. PEM:', pemContents, 'Bytes:', bytes, e);
+            throw new Error('Failed to import RSA public key: ' + e.message);
+        }
     }
     
     async function uploadToTEE(encryptedData) {

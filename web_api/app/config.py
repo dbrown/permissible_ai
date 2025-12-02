@@ -20,6 +20,9 @@ class Config:
     GOOGLE_APPLICATION_CREDENTIALS = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
     GCP_DEFAULT_ZONE = os.environ.get('GCP_DEFAULT_ZONE', 'us-central1-a')
     GCP_DEFAULT_REGION = os.environ.get('GCP_DEFAULT_REGION', 'us-central1')
+
+    # TEE Service Endpoint
+    TEE_SERVICE_ENDPOINT = os.environ.get('TEE_SERVICE_ENDPOINT')
     
     # Session
     PERMANENT_SESSION_LIFETIME = timedelta(days=7)
@@ -50,6 +53,8 @@ class ProductionConfig(Config):
             raise ValueError("DATABASE_URL must be set in production")
         if not cls.GOOGLE_CLIENT_ID or not cls.GOOGLE_CLIENT_SECRET:
             raise ValueError("Google OAuth credentials must be set in production")
+        if not cls.TEE_SERVICE_ENDPOINT:
+            raise ValueError("TEE_SERVICE_ENDPOINT must be set in production")
 
 
 class TestingConfig(Config):

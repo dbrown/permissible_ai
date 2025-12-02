@@ -31,7 +31,8 @@ def attestation_proxy():
         return response
     
     try:
-        tee_endpoint = os.getenv('TEE_SERVICE_ENDPOINT', 'http://localhost:8080')
+        from flask import current_app
+        tee_endpoint = current_app.config['TEE_SERVICE_ENDPOINT']
         response = requests.get(f"{tee_endpoint}/attestation", timeout=10)
         response.raise_for_status()
         

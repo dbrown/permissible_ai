@@ -170,7 +170,8 @@ def upload_dataset(session_id):
                               dataset_id=dataset.id))
     
     # Get TEE endpoint for client-side upload
-    tee_endpoint = os.getenv('TEE_SERVICE_ENDPOINT', 'http://localhost:8080')
+    from flask import current_app
+    tee_endpoint = current_app.config['TEE_SERVICE_ENDPOINT']
     
     return render_template('tee/upload_dataset.html', 
                          session=session,
@@ -193,7 +194,8 @@ def upload_dataset_client(session_id, dataset_id):
         return redirect(url_for('tee_web.session_detail', session_id=session_id))
     
     # Get TEE endpoint and generate upload token
-    tee_endpoint = os.getenv('TEE_SERVICE_ENDPOINT', 'http://localhost:8080')
+    from flask import current_app
+    tee_endpoint = current_app.config['TEE_SERVICE_ENDPOINT']
     
     # Generate a short-lived upload token for this dataset
     upload_token = jwt.encode(
@@ -365,28 +367,38 @@ def approve_query(query_id):
     if query.session.require_unanimous_approval and approval_count >= participant_count:
         query.approve()
         
-        # Execute query (mock for development)
-        import random
-        mock_results = {
-            'columns': ['metric', 'value', 'count'],
-            'rows': [
-                ['Metric A', round(random.uniform(50, 100), 2), random.randint(100, 500)],
-                ['Metric B', round(random.uniform(50, 100), 2), random.randint(100, 500)],
-                ['Metric C', round(random.uniform(50, 100), 2), random.randint(100, 500)]
-            ]
-        }
-        
-        result = QueryResult(
-            query_id=query.id,
-            result_data=mock_results,
-            result_format='json',
-            row_count=len(mock_results['rows']),
-            file_size_bytes=len(str(mock_results))
-        )
-        db.session.add(result)
-        query.complete(execution_time=round(random.uniform(0.5, 2.0), 2))
-        
-        flash('Query fully approved and executed!', 'success')
+        # Submit query to TEE for execution
+        try:
+            import requests
+            
+            tee_endpoint = current_app.config['TEE_SERVICE_ENDPOINT']
+            
+            # Get dataset IDs for this query
+            dataset_ids = query.accesses_datasets or []
+            
+            # Submit to TEE
+            response = requests.post(
+                f'{tee_endpoint}/execute-query',
+                json={
+                    'query_id': query.id,
+                    'session_id': query.session_id,
+                    'query_text': query.query_text,
+                    'dataset_ids': dataset_ids
+                },
+                timeout=60
+            )
+            
+            if response.status_code == 200:
+                query.start_execution()
+                flash('Query fully approved and submitted to TEE for execution!', 'success')
+            else:
+                raise Exception(f"TEE returned status {response.status_code}")
+            
+        except Exception as e:
+            query.status = QueryStatus.ERROR
+            query.error_message = str(e)
+            db.session.commit()
+            flash(f'Query approved but execution failed: {str(e)}', 'error')
     else:
         flash(f'Query approved ({approval_count}/{participant_count} approvals)', 'success')
     

@@ -308,38 +308,34 @@ def list_datasets(session_id):
 
 @bp.route('/sessions/<int:session_id>/datasets', methods=['POST'])
 @api_key_required
-def upload_dataset(session_id):
+def initiate_dataset_upload(session_id):
     """
-    Initiate dataset upload to TEE
+    Initiate a dataset upload. Returns upload URL for direct browser-to-TEE transfer.
     
     Request body:
     {
         "name": "Customer Data",
         "description": "Q4 2024 customer dataset",
-        "schema": {
-            "columns": [
-                {"name": "customer_id", "type": "string"},
-                {"name": "purchase_amount", "type": "float"}
-            ]
-        },
-        "gcs_bucket": "my-bucket",
-        "gcs_path": "datasets/customers.csv"
+        "file_size": 1024000
     }
+    
+    Response includes TEE upload endpoint for direct client upload.
+    Note: Only CSV files with headers are supported.
     """
     session = CollaborationSession.query.get(session_id)
     
     if not session:
-        return jsonify({'error': 'TEE not found'}), 404
+        return jsonify({'error': 'Collaboration session not found'}), 404
     
     if not session.is_participant(current_user):
         return jsonify({'error': 'Forbidden'}), 403
     
     if session.status != SessionStatus.ACTIVE:
-        return jsonify({'error': 'TEE must be active to upload datasets'}), 400
+        return jsonify({'error': 'Session must be active to upload datasets'}), 400
     
     data = request.get_json()
     
-    required_fields = ['name', 'gcs_bucket', 'gcs_path']
+    required_fields = ['name']
     missing_fields = [field for field in required_fields if field not in data]
     if missing_fields:
         return jsonify({
@@ -348,58 +344,68 @@ def upload_dataset(session_id):
         }), 400
     
     try:
+        # Create dataset record in pending state
         dataset = Dataset(
             session_id=session_id,
             owner_id=current_user.id,
             name=data['name'],
             description=data.get('description', ''),
-            schema_info=data.get('schema'),
-            gcs_bucket=data['gcs_bucket'],
-            gcs_path=data['gcs_path'],
-            status=DatasetStatus.UPLOADING
+            file_size_bytes=data.get('file_size'),
+            status=DatasetStatus.PENDING
         )
         
         db.session.add(dataset)
         db.session.commit()
         
-        # Trigger async encryption and processing
-        # In production, this would be a background task
+        # Generate upload token for TEE authentication
+        import jwt
+        from flask import current_app
+        from datetime import timedelta
+        
+        upload_token = jwt.encode(
+            {
+                'dataset_id': dataset.id,
+                'session_id': session.id,
+                'user_id': current_user.id,
+                'exp': datetime.utcnow() + timedelta(hours=1)
+            },
+            current_app.config['SECRET_KEY'],
+            algorithm='HS256'
+        )
+        
+        # Get TEE endpoint from config
+        tee_endpoint = current_app.config['TEE_SERVICE_ENDPOINT']
+        
+        logger.info(f"Dataset {dataset.id} initiated for upload to TEE")
+        
+        # Get TEE attestation information (includes public key for encryption)
+        import requests
         try:
-            gcp_service = GCPTEEService()
-            encryption_result = gcp_service.encrypt_and_transfer_dataset(
-                dataset_id=dataset.id,
-                source_bucket=data['gcs_bucket'],
-                source_path=data['gcs_path'],
-                session_id=session.id
-            )
-            
-            # Update dataset with encryption info
-            dataset.encrypted_path = encryption_result['encrypted_path']
-            dataset.encryption_key_id = encryption_result['key_id']
-            dataset.checksum = encryption_result['checksum']
-            dataset.file_size_bytes = encryption_result.get('file_size_bytes')
-            dataset.status = DatasetStatus.ENCRYPTED
-            db.session.commit()
-            
+            attestation_response = requests.get(f'{tee_endpoint}/attestation', timeout=5)
+            attestation_response.raise_for_status()
+            attestation_data = attestation_response.json()
         except Exception as e:
-            # In development, allow datasets without actual GCS storage
-            logger.warning(f"Dataset encryption skipped (development mode): {e}")
-            dataset.status = DatasetStatus.UPLOADED
-            db.session.commit()
+            logger.error(f"Failed to get TEE attestation: {e}")
+            db.session.rollback()
             return jsonify({
-                'dataset': dataset.to_dict(),
-                'warning': f'Dataset record created but encryption failed: {str(e)}'
-            }), 201
+                'error': 'TEE service unavailable',
+                'message': 'Could not retrieve TEE attestation'
+            }), 503
         
         return jsonify({
             'dataset': dataset.to_dict(),
-            'message': 'Dataset upload initiated'
+            'upload_url': f'{tee_endpoint}/upload',
+            'upload_token': upload_token,
+            'tee_public_key': attestation_data.get('public_key_pem'),
+            'attestation': attestation_data,
+            'message': 'Encrypt dataset with TEE public key and upload to the provided URL'
         }), 201
         
     except Exception as e:
         db.session.rollback()
+        logger.error(f"Failed to initiate dataset upload: {e}")
         return jsonify({
-            'error': 'Failed to create dataset',
+            'error': 'Failed to initiate dataset upload',
             'message': str(e)
         }), 500
 
@@ -629,43 +635,44 @@ def approve_query(query_id):
     if query.session.require_unanimous_approval and approval_count >= participant_count:
         query.approve()
         
-        # Trigger execution in shared TEE (or simulate completion for development)
+        # Submit query to TEE for execution
         try:
-            # For development without actual TEE: simulate immediate completion
-            import random
+            import requests
+            from flask import current_app
             
-            # Simulate query results
-            mock_results = {
-                'columns': ['diagnosis_code', 'total_cases', 'readmissions', 'readmission_rate'],
-                'rows': [
-                    ['DX001', 150, 23, 15.33],
-                    ['DX002', 98, 12, 12.24],
-                    ['DX003', 76, 8, 10.53]
-                ]
-            }
+            tee_endpoint = current_app.config['TEE_SERVICE_ENDPOINT']
             
-            # Create result record
-            result = QueryResult(
-                query_id=query.id,
-                result_data=mock_results,
-                result_format='json',
-                row_count=len(mock_results['rows']),
-                file_size_bytes=len(str(mock_results))
+            # Get dataset IDs for this query
+            dataset_ids = query.accesses_datasets or []
+            
+            # Submit to TEE
+            response = requests.post(
+                f'{tee_endpoint}/execute',
+                json={
+                    'query_id': query.id,
+                    'session_id': query.session_id,
+                    'query_text': query.query_text,
+                    'dataset_ids': dataset_ids
+                },
+                timeout=60
             )
-            db.session.add(result)
             
-            # Mark query as completed
-            query.complete(execution_time=round(random.uniform(0.5, 2.0), 2))
-            
-            logger.info(f"Query {query.id} execution completed (development mode)")
+            if response.status_code == 200:
+                query.start_execution()
+                logger.info(f"Query {query.id} submitted to TEE for execution")
+            else:
+                raise Exception(f"TEE returned status {response.status_code}: {response.text}")
             
         except Exception as e:
-            logger.error(f"Failed to execute query {query.id}: {e}")
+            logger.error(f"Failed to submit query {query.id} to TEE: {e}")
+            query.status = QueryStatus.ERROR
+            query.error_message = str(e)
+            db.session.commit()
             return jsonify({
-                'message': f'Query approved by {approval_count}/{participant_count} participants and execution started',
+                'message': f'Query approved by {approval_count}/{participant_count} participants but execution failed',
                 'query': query.to_dict(),
-                'warning': f'Execution failed: {str(e)}'
-            })
+                'error': str(e)
+            }), 500
         
         return jsonify({
             'message': 'Query approved by all participants and executed successfully',

@@ -1,6 +1,9 @@
 """
 Application factory and initialization
 """
+
+# Ensure .env is loaded before anything else
+from app.env_loader import *
 from flask import Flask
 from app.config import config
 from app.extensions import db, login_manager, oauth
