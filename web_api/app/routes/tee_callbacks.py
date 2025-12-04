@@ -32,7 +32,12 @@ def attestation_proxy():
     
     try:
         from flask import current_app
-        tee_endpoint = current_app.config['TEE_SERVICE_ENDPOINT']
+        tee_endpoint = current_app.config.get('TEE_SERVICE_ENDPOINT')
+        
+        if not tee_endpoint:
+            raise ValueError("TEE_SERVICE_ENDPOINT not configured in Flask app")
+            
+        logger.info(f"Proxying attestation request to: {tee_endpoint}/attestation")
         response = requests.get(f"{tee_endpoint}/attestation", timeout=10)
         response.raise_for_status()
         
@@ -42,7 +47,12 @@ def attestation_proxy():
         
     except Exception as e:
         logger.error(f"Attestation proxy error: {e}")
-        error_response = jsonify({'error': str(e)})
+        # Return more detailed error for debugging
+        error_msg = f"{type(e).__name__}: {str(e)}"
+        if 'tee_endpoint' in locals() and tee_endpoint:
+             error_msg += f" (Endpoint: {tee_endpoint})"
+             
+        error_response = jsonify({'error': error_msg})
         error_response.headers['Access-Control-Allow-Origin'] = '*'
         return error_response, 500
 

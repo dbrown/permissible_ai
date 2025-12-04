@@ -19,7 +19,13 @@ bp = Blueprint('datasets_web', __name__, url_prefix='/datasets')
 def list_datasets():
     """List all datasets owned by the user"""
     datasets = Dataset.query.filter_by(owner_id=current_user.id).order_by(Dataset.uploaded_at.desc()).all()
-    return render_template('datasets/index.html', datasets=datasets)
+    
+    # Fetch metadata from TEE
+    dataset_ids = [d.id for d in datasets]
+    tee_service = GCPTEEService()
+    dataset_info = tee_service.get_datasets_info(dataset_ids)
+    
+    return render_template('datasets/index.html', datasets=datasets, dataset_info=dataset_info)
 
 
 @bp.route('/upload', methods=['GET', 'POST'])

@@ -358,14 +358,16 @@ def upload_dataset():
             'uploaded_at': datetime.utcnow().isoformat(),
             'checksum': hashlib.sha256(plaintext_data).hexdigest(),
             'table_name': table_name,
-            'row_count': row_count
+            'row_count': row_count,
+            'columns': header
         }
         
         return jsonify({
             'status': 'success',
             'dataset_id': dataset_id,
             'checksum': DATASETS[dataset_id]['checksum'],
-            'row_count': row_count
+            'row_count': row_count,
+            'columns': header
         })
         
     except Exception as e:
@@ -437,6 +439,35 @@ def execute_query():
     except Exception as e:
         logger.error(f"Query execution failed: {e}", exc_info=True)
         notify_control_plane(query_id, 'failed', {'error': str(e)}, is_query=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/datasets/info', methods=['POST'])
+def get_datasets_info():
+    """
+    Get metadata for specific datasets (file size, columns, etc.)
+    """
+    try:
+        data = request.json
+        dataset_ids = data.get('dataset_ids', [])
+        
+        result = {}
+        for dataset_id in dataset_ids:
+            # dataset_id might be string or int in JSON, but key in DATASETS might be int
+            # Let's handle both
+            dataset = DATASETS.get(dataset_id) or DATASETS.get(int(dataset_id))
+            
+            if dataset:
+                result[dataset_id] = {
+                    'file_size': dataset.get('file_size'),
+                    'filename': dataset.get('filename'),
+                    'columns': dataset.get('columns', []),
+                    'row_count': dataset.get('row_count')
+                }
+        
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Failed to get datasets info: {e}")
         return jsonify({'error': str(e)}), 500
 
 

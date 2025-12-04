@@ -33,6 +33,18 @@
         </p>
         
         <div style="border-top: 1px solid #eee; padding-top: 1rem; margin-top: auto;">
+            {% if dataset_info and dataset.id in dataset_info %}
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #888; margin-bottom: 0.5rem;">
+                <span>Size:</span>
+                <span>{{ dataset_info[dataset.id].file_size }} bytes</span>
+            </div>
+            <div style="font-size: 0.85rem; color: #888; margin-bottom: 0.5rem;">
+                <div style="margin-bottom: 0.25rem;">Columns:</div>
+                <div style="font-family: monospace; background: #f8f9fa; padding: 0.5rem; border-radius: 4px; overflow-x: auto; white-space: nowrap;">
+                    {{ dataset_info[dataset.id].columns|join(', ') }}
+                </div>
+            </div>
+            {% endif %}
             <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #888; margin-bottom: 0.5rem;">
                 <span>Uploaded:</span>
                 <span>{{ dataset.uploaded_at.strftime('%Y-%m-%d') }}</span>

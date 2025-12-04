@@ -526,6 +526,40 @@ class GCPTEEService:
             logger.error(f"Failed to get instance status: {e}")
             raise
     
+    def get_datasets_info(self, dataset_ids: List[int]) -> Dict[int, Any]:
+        """
+        Get metadata for datasets from the TEE
+        
+        Args:
+            dataset_ids: List of dataset IDs
+            
+        Returns:
+            Dictionary mapping dataset_id to metadata
+        """
+        if not dataset_ids:
+            return {}
+            
+        try:
+            import requests
+            
+            response = requests.post(
+                f"{self.tee_endpoint}/datasets/info",
+                json={'dataset_ids': dataset_ids},
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                # Convert string keys back to integers if necessary
+                result = response.json()
+                return {int(k): v for k, v in result.items()}
+            else:
+                logger.warning(f"Failed to get datasets info: {response.status_code}")
+                return {}
+                
+        except Exception as e:
+            logger.error(f"Failed to get datasets info from TEE: {e}")
+            return {}
+    
     # Helper methods
     
     def _wait_for_operation(self, project_id: str, zone: str, operation_name: str, timeout: int = 300):
