@@ -43,6 +43,14 @@ session_participants = db.Table('session_participants',
 )
 
 
+# Association table for session datasets (many-to-many)
+session_datasets = db.Table('session_datasets',
+    db.Column('session_id', db.Integer, db.ForeignKey('collaboration_sessions.id'), primary_key=True),
+    db.Column('dataset_id', db.Integer, db.ForeignKey('datasets.id'), primary_key=True),
+    db.Column('added_at', db.DateTime, default=datetime.utcnow, nullable=False)
+)
+
+
 # Association table for query approvals (many-to-many)
 query_approvals = db.Table('query_approvals',
     db.Column('query_id', db.Integer, db.ForeignKey('queries.id'), primary_key=True),
@@ -74,7 +82,7 @@ class CollaborationSession(db.Model):
     # Relationships
     creator = db.relationship('User', foreign_keys=[creator_id], backref='created_sessions')
     participants = db.relationship('User', secondary=session_participants, backref='participating_sessions')
-    datasets = db.relationship('Dataset', backref='session', lazy='dynamic', cascade='all, delete-orphan')
+    datasets = db.relationship('Dataset', secondary=session_datasets, backref='sessions', lazy='dynamic')
     queries = db.relationship('Query', backref='session', lazy='dynamic', cascade='all, delete-orphan')
     
     def __repr__(self):
@@ -127,7 +135,8 @@ class Dataset(db.Model):
     __tablename__ = 'datasets'
     
     id = db.Column(db.Integer, primary_key=True)
-    session_id = db.Column(db.Integer, db.ForeignKey('collaboration_sessions.id'), nullable=False, index=True)
+    # session_id is removed/deprecated in favor of many-to-many relationship
+    # session_id = db.Column(db.Integer, db.ForeignKey('collaboration_sessions.id'), nullable=False, index=True)
     owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     
     name = db.Column(db.String(255), nullable=False)
@@ -162,7 +171,7 @@ class Dataset(db.Model):
         """Convert Dataset to dictionary for API responses"""
         return {
             'id': self.id,
-            'session_id': self.session_id,
+            # 'session_id': self.session_id, # Deprecated
             'name': self.name,
             'description': self.description,
             'owner': {

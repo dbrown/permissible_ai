@@ -244,7 +244,7 @@ def upload_dataset():
     Expected payload:
     {
         "dataset_id": 123,
-        "session_id": 456,
+        "session_id": 456, # Optional
         "dataset_name": "customer_data",
         "encrypted_data": "base64...",  # AES-GCM encrypted CSV file
         "encrypted_key": "base64...",    # RSA-OAEP encrypted AES key
@@ -268,7 +268,7 @@ def upload_dataset():
         
         data = request.json
         dataset_id = data['dataset_id']
-        session_id = data['session_id']
+        session_id = data.get('session_id')
         dataset_name = data.get('dataset_name', f'dataset_{dataset_id}')
         
         logger.info(f"Receiving encrypted upload for dataset {dataset_id}, session {session_id}")
@@ -321,75 +321,56 @@ def upload_dataset():
         except csv.Error as e:
             raise ValueError(f"Invalid CSV format: {str(e)}")
         
-        # Load CSV into session's SQLite database
-        load_result = QUERY_EXECUTOR.load_dataset(
-            session_id=session_id,
-            dataset_id=dataset_id,
-            dataset_name=dataset_name,
-            csv_content=csv_content
-        )
+        # Determine storage key and load if session exists
+        if session_id:
+            # Session-bound upload (Legacy flow)
+            storage_key = get_or_create_session_key(session_id)
+            
+            # Load CSV into session's SQLite database
+            load_result = QUERY_EXECUTOR.load_dataset(
+                session_id=session_id,
+                dataset_id=dataset_id,
+                dataset_name=dataset_name,
+                csv_content=csv_content
+            )
+            table_name = load_result['table_name']
+            row_count = load_result['row_count']
+        else:
+            # Independent upload
+            storage_key = AESGCM.generate_key(bit_length=256)
+            table_name = None
+            # Recount rows (since iterator was consumed)
+            row_count = len(csv_content.strip().split('\n')) - 1
         
-        # Re-encrypt with session-specific key for backup storage
-        session_key = get_or_create_session_key(session_id)
-        session_iv = os.urandom(12)
-        session_aesgcm = AESGCM(session_key)
-        session_encrypted = session_aesgcm.encrypt(session_iv, plaintext_data, None)
+        # Re-encrypt with storage key for backup/persistence
+        storage_iv = os.urandom(12)
+        storage_aesgcm = AESGCM(storage_key)
+        storage_encrypted = storage_aesgcm.encrypt(storage_iv, plaintext_data, None)
         
-        # Store encrypted dataset (in-memory for demo, would be encrypted file storage)
+        # Store encrypted dataset
         DATASETS[dataset_id] = {
             'session_id': session_id,
-            'encrypted_data': session_encrypted,
-            'iv': session_iv,
+            'encrypted_data': storage_encrypted,
+            'iv': storage_iv,
+            'storage_key': storage_key,
             'filename': data['filename'],
             'file_size': data['file_size'],
             'uploaded_at': datetime.utcnow().isoformat(),
             'checksum': hashlib.sha256(plaintext_data).hexdigest(),
-            'table_name': load_result['table_name'],
-            'row_count': load_result['row_count']
+            'table_name': table_name,
+            'row_count': row_count
         }
-        
-        logger.info(
-            f"Dataset {dataset_id} stored securely in TEE and loaded into SQLite: "
-            f"{load_result['table_name']} with {load_result['row_count']} rows"
-        )
-        
-        # Notify control plane of successful upload
-        notify_control_plane(dataset_id, 'available', {
-            'checksum': DATASETS[dataset_id]['checksum'],
-            'file_size': data['file_size'],
-            'table_name': load_result['table_name'],
-            'row_count': load_result['row_count'],
-            'schema': {
-                'columns': [
-                    {'name': orig, 'sanitized_name': sanitized}
-                    for orig, sanitized in load_result['columns']
-                ]
-            }
-        })
         
         return jsonify({
             'status': 'success',
             'dataset_id': dataset_id,
             'checksum': DATASETS[dataset_id]['checksum'],
-            'table_name': load_result['table_name'],
-            'row_count': load_result['row_count'],
-            'message': 'Dataset encrypted, validated, and loaded into secure SQLite database'
+            'row_count': row_count
         })
         
-    except ValueError as e:
-        logger.error(f"Validation failed: {e}")
-        if 'dataset_id' in locals():
-            notify_control_plane(dataset_id, 'failed', {'error': str(e)})
-        return jsonify({'error': str(e)}), 400
-        
     except Exception as e:
-        logger.error(f"Upload failed: {e}", exc_info=True)
-        
-        # Notify control plane of failure
-        if 'dataset_id' in locals():
-            notify_control_plane(dataset_id, 'failed', {'error': str(e)})
-        
-        return jsonify({'error': f'Upload failed: {str(e)}'}), 500
+        logger.error(f"Upload failed: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/execute', methods=['POST'])

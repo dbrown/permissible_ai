@@ -45,6 +45,7 @@ def create_session():
         participant_emails = request.form.get('participant_emails', '')
         allow_cross_party_joins = request.form.get('allow_cross_party_joins') == 'on'
         require_unanimous = request.form.get('require_unanimous_approval') == 'on'
+        dataset_ids = request.form.getlist('dataset_ids')
         
         if not name:
             flash('Session name is required', 'error')
@@ -73,13 +74,22 @@ def create_session():
                 elif not user:
                     flash(f'User {email} not found - skipped', 'warning')
         
+        # Add selected datasets
+        if dataset_ids:
+            for ds_id in dataset_ids:
+                dataset = Dataset.query.get(ds_id)
+                if dataset and dataset.owner_id == current_user.id:
+                    session.datasets.append(dataset)
+        
         db.session.add(session)
         db.session.commit()
         
         flash(f'Collaboration session "{name}" created successfully!', 'success')
         return redirect(url_for('tee_web.session_detail', session_id=session.id))
     
-    return render_template('tee/create_session.html')
+    # Get user's available datasets for selection
+    available_datasets = Dataset.query.filter_by(owner_id=current_user.id).all()
+    return render_template('tee/create_session.html', available_datasets=available_datasets)
 
 
 @bp.route('/<int:session_id>')

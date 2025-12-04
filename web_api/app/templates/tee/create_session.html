@@ -21,6 +21,29 @@
         <textarea name="participant_emails" rows="2" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;" placeholder="alice@example.com, bob@example.com"></textarea>
         <small style="color: #666; display: block; margin-top: 0.25rem;">Comma-separated list of participant email addresses</small>
     </div>
+
+    {% if available_datasets %}
+    <div style="margin-bottom: 1.5rem;">
+        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Select Datasets</label>
+        <div style="border: 1px solid #ddd; border-radius: 5px; padding: 0.5rem; max-height: 200px; overflow-y: auto;">
+            {% for dataset in available_datasets %}
+            <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; border-bottom: 1px solid #eee;">
+                <input type="checkbox" name="dataset_ids" value="{{ dataset.id }}" style="width: 18px; height: 18px;">
+                <div>
+                    <div style="font-weight: 500;">{{ dataset.name }}</div>
+                    <div style="font-size: 0.8rem; color: #666;">{{ dataset.description }}</div>
+                </div>
+            </label>
+            {% endfor %}
+        </div>
+        <small style="color: #666; display: block; margin-top: 0.25rem;">Select datasets to include in this session</small>
+    </div>
+    {% else %}
+    <div style="margin-bottom: 1.5rem; padding: 1rem; background: #f8f9fa; border-radius: 5px;">
+        <p style="margin: 0; color: #666;">No datasets available. You can upload datasets independently and add them later.</p>
+        <a href="{{ url_for('datasets_web.upload_dataset') }}" style="display: inline-block; margin-top: 0.5rem; font-size: 0.9rem;">Upload New Dataset</a>
+    </div>
+    {% endif %}
     
     <div style="margin-bottom: 1.5rem;">
         <label style="display: flex; align-items: center; gap: 0.5rem;">

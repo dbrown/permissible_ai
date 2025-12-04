@@ -85,6 +85,8 @@
     <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
         <a href="{{ url_for('tee_web.sessions') }}" class="btn btn-primary">🤝 Collaborations</a>
         <a href="{{ url_for('tee_web.create_session') }}" class="btn btn-primary">+ New Session</a>
+        <a href="{{ url_for('datasets_web.list_datasets') }}" class="btn btn-primary">📂 My Datasets</a>
+        <a href="{{ url_for('datasets_web.upload_dataset') }}" class="btn btn-primary">⬆️ Upload Dataset</a>
         <a href="{{ url_for('api_keys.list_keys') }}" class="btn btn-secondary">🔑 API Keys</a>
         {% if current_user.is_admin %}
         <a href="{{ url_for('admin.users') }}" class="btn btn-secondary">Manage Users</a>

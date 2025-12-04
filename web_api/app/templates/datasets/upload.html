@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Dataset{% endblock %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 0 auto;">
+    <h1 style="margin-bottom: 2rem;">Upload New Dataset</h1>
+    
+    <div style="background: white; padding: 2rem; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
+        <form method="POST">
+            <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Dataset Name *</label>
+                <input type="text" name="name" required style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;">
+            </div>
+            
+            <div style="margin-bottom: 1.5rem;">
+                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem;">Description</label>
+                <textarea name="description" rows="3" style="width: 100%; padding: 0.75rem; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem;" placeholder="Describe the contents of this dataset..."></textarea>
+            </div>
+            
+            <div style="background: #e9ecef; padding: 1rem; border-radius: 5px; margin-bottom: 2rem;">
+                <h5 style="margin-top: 0; margin-bottom: 0.5rem;">🔒 Security Note</h5>
+                <p style="margin: 0; font-size: 0.9rem; color: #495057;">
+                    Metadata entered here is stored in the management plane. 
+                    The actual file upload will happen in the next step, directly to the TEE.
+                </p>
+            </div>
+            
+            <div style="display: flex; gap: 1rem;">
+                <button type="submit" class="btn btn-primary" style="flex: 1;">Create & Proceed to Upload</button>
+                <a href="{{ url_for('datasets_web.list_datasets') }}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
