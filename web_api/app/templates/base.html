@@ -204,6 +204,7 @@
                 {% if current_user.is_admin %}
                 <li><a href="{{ url_for('admin.requests') }}">Admin Requests</a></li>
                 <li><a href="{{ url_for('admin.users') }}">Users</a></li>
+                <li><a href="{{ url_for('admin.tee_datasets') }}">TEE Datasets</a></li>
                 {% endif %}
                 <li class="user-info" style="margin-left: auto;">
                     {% if current_user.picture %}

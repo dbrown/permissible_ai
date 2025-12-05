@@ -330,7 +330,9 @@
                     status: 'available',
                     metadata: {
                         checksum: result.checksum,
-                        file_size: selectedFile.size
+                        file_size: selectedFile.size,
+                        row_count: result.row_count,
+                        columns: result.columns
                     },
                     timestamp: new Date().toISOString()
                 })

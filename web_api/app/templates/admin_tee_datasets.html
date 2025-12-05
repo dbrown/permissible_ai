@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}TEE Datasets (Admin){% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 2rem;">
+    <a href="{{ url_for('main.dashboard') }}" style="color: #667eea; text-decoration: none;">← Back to Dashboard</a>
+</div>
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+    <h1>TEE Datasets (Real-time)</h1>
+    <span class="badge badge-admin">Admin Only</span>
+</div>
+
+<div style="background: white; border-radius: 10px; padding: 1.5rem; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border: 1px solid #eee;">
+    <p style="color: #666; margin-bottom: 1.5rem;">
+        This page shows the datasets currently loaded in the Trusted Execution Environment (TEE) memory.
+        This data is fetched directly from the TEE server.
+    </p>
+
+    {% if datasets %}
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background: #f8f9fa; text-align: left;">
+                    <th style="padding: 1rem; border-bottom: 2px solid #ddd;">ID</th>
+                    <th style="padding: 1rem; border-bottom: 2px solid #ddd;">Filename</th>
+                    <th style="padding: 1rem; border-bottom: 2px solid #ddd;">Rows</th>
+                    <th style="padding: 1rem; border-bottom: 2px solid #ddd;">Size</th>
+                    <th style="padding: 1rem; border-bottom: 2px solid #ddd;">Columns</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for id, info in datasets.items() %}
+                <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 1rem;">{{ id }}</td>
+                    <td style="padding: 1rem; font-weight: 500;">{{ info.filename }}</td>
+                    <td style="padding: 1rem;">{{ info.row_count }}</td>
+                    <td style="padding: 1rem;">{{ (info.file_size / 1024)|round(1) }} KB</td>
+                    <td style="padding: 1rem;">
+                        <div style="display: flex; flex-wrap: wrap; gap: 0.25rem; max-width: 400px;">
+                            {% for col in info.columns %}
+                            <span style="background: #f1f3f5; padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.8rem; font-family: monospace;">{{ col }}</span>
+                            {% endfor %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 3rem; background: #f8f9fa; border-radius: 10px;">
+        <p style="color: #666;">No datasets found in TEE memory.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -67,6 +67,8 @@ CONTROL_PLANE_URL = os.getenv('CONTROL_PLANE_URL', 'http://localhost:5000')
 from query_executor import QueryExecutor
 QUERY_EXECUTOR = None  # Initialized at startup
 
+DATASETS_FILE = 'tee_datasets.json'
+
 
 def load_tee_keypair():
     """
@@ -362,6 +364,9 @@ def upload_dataset():
             'columns': header
         }
         
+        # Persist state
+        save_datasets()
+        
         return jsonify({
             'status': 'success',
             'dataset_id': dataset_id,
@@ -471,6 +476,59 @@ def get_datasets_info():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/datasets/list', methods=['GET'])
+def list_all_datasets():
+    """
+    List all datasets currently loaded in the TEE
+    """
+    try:
+        logger.info(f"Listing all datasets. Current count: {len(DATASETS)}")
+        result = {}
+        for dataset_id, dataset in DATASETS.items():
+            result[dataset_id] = {
+                'file_size': dataset.get('file_size'),
+                'filename': dataset.get('filename'),
+                'columns': dataset.get('columns', []),
+                'row_count': dataset.get('row_count'),
+                'uploaded_at': dataset.get('uploaded_at')
+            }
+        
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"Failed to list datasets: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/reset', methods=['POST'])
+def reset_tee():
+    """
+    Reset TEE state - Clear all datasets and sessions
+    WARNING: This deletes all data!
+    """
+    try:
+        # Clear in-memory state
+        DATASETS.clear()
+        SESSION_KEYS.clear()
+        
+        # Clear persisted state
+        if os.path.exists(DATASETS_FILE):
+            os.remove(DATASETS_FILE)
+            
+        # Clear SQLite databases
+        if QUERY_EXECUTOR:
+            import shutil
+            if os.path.exists(QUERY_EXECUTOR.data_dir):
+                shutil.rmtree(QUERY_EXECUTOR.data_dir)
+                os.makedirs(QUERY_EXECUTOR.data_dir)
+        
+        logger.warning("TEE state has been reset!")
+        return jsonify({'status': 'success', 'message': 'TEE state reset complete'})
+        
+    except Exception as e:
+        logger.error(f"Failed to reset TEE: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 def get_or_create_session_key(session_id: int) -> bytes:
     """Generate or retrieve session-specific encryption key"""
     if session_id not in SESSION_KEYS:
@@ -508,6 +566,43 @@ def notify_control_plane(entity_id: int, status: str, metadata: Dict[str, Any], 
         # Don't fail the operation if callback fails
 
 
+def save_datasets():
+    """Persist datasets to disk (simulated sealed storage)"""
+    try:
+        # Convert bytes to base64 for JSON serialization
+        serializable_datasets = {}
+        for k, v in DATASETS.items():
+            serializable_datasets[str(k)] = v.copy()
+            # Handle bytes
+            for key in ['encrypted_data', 'iv', 'storage_key']:
+                if key in serializable_datasets[str(k)] and isinstance(serializable_datasets[str(k)][key], bytes):
+                    serializable_datasets[str(k)][key] = base64.b64encode(serializable_datasets[str(k)][key]).decode('utf-8')
+        
+        with open(DATASETS_FILE, 'w') as f:
+            json.dump(serializable_datasets, f, indent=2)
+        logger.info(f"Saved {len(DATASETS)} datasets to {DATASETS_FILE}")
+    except Exception as e:
+        logger.error(f"Failed to save datasets: {e}")
+
+def load_datasets():
+    """Load datasets from disk (simulated sealed storage)"""
+    global DATASETS
+    try:
+        if os.path.exists(DATASETS_FILE):
+            with open(DATASETS_FILE, 'r') as f:
+                loaded = json.load(f)
+                # Convert keys to int and base64 strings back to bytes
+                for k, v in loaded.items():
+                    dataset_id = int(k)
+                    DATASETS[dataset_id] = v
+                    for key in ['encrypted_data', 'iv', 'storage_key']:
+                        if key in v and isinstance(v[key], str):
+                            DATASETS[dataset_id][key] = base64.b64decode(v[key])
+            logger.info(f"Loaded {len(DATASETS)} datasets from {DATASETS_FILE}")
+    except Exception as e:
+        logger.error(f"Failed to load datasets: {e}")
+
+
 if __name__ == '__main__':
     logger.info("=" * 80)
     logger.info("Starting TEE Server in Confidential VM")
@@ -522,12 +617,18 @@ if __name__ == '__main__':
     public_key_pem = load_tee_keypair()
     logger.info(f"TEE Public Key:\n{public_key_pem}")
     
+    # Load persisted datasets
+    load_datasets()
+    
     # Calculate code measurement
     code_hash = calculate_code_measurement()
     logger.info(f"Code Measurement: {code_hash}")
     
     if TEE_IMAGE_ID:
         logger.info(f"Image ID: {TEE_IMAGE_ID}")
+    
+    # Load datasets from disk
+    load_datasets()
     
     logger.info("=" * 80)
     logger.info("⚠️  ZERO-TRUST VERIFICATION REQUIRED:")

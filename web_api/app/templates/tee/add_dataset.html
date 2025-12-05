@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Add Datasets to {{ session.name }}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 2rem;">
+    <a href="{{ url_for('tee_web.session_detail', session_id=session.id) }}" style="color: #667eea; text-decoration: none;">← Back to Session</a>
+</div>
+
+<h1 style="margin-bottom: 2rem;">Add Datasets to Session</h1>
+
+<form method="POST" style="max-width: 800px;">
+    {% if my_datasets %}
+    <div style="margin-bottom: 2rem;">
+        <h3 style="margin-bottom: 1rem; color: #444;">My Datasets</h3>
+        <div style="border: 1px solid #ddd; border-radius: 5px; padding: 0.5rem; max-height: 300px; overflow-y: auto;">
+            {% for dataset in my_datasets %}
+            <label style="display: flex; align-items: center; gap: 1rem; padding: 1rem; border-bottom: 1px solid #eee; cursor: pointer;">
+                <input type="checkbox" name="dataset_ids" value="{{ dataset.id }}" style="width: 20px; height: 20px;">
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; margin-bottom: 0.25rem;">{{ dataset.name }}</div>
+                    <div style="font-size: 0.9rem; color: #666;">{{ dataset.description or 'No description' }}</div>
+                    <div style="font-size: 0.8rem; color: #888; margin-top: 0.25rem;">
+                        Status: {{ dataset.status.value|title }} | Size: {{ (dataset.file_size_bytes / 1024)|round(1) if dataset.file_size_bytes else 0 }} KB
+                    </div>
+                </div>
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if public_datasets %}
+    <div style="margin-bottom: 2rem;">
+        <h3 style="margin-bottom: 1rem; color: #444;">Public Datasets from Participants</h3>
+        <div style="border: 1px solid #ddd; border-radius: 5px; padding: 0.5rem; max-height: 300px; overflow-y: auto;">
+            {% for dataset in public_datasets %}
+            <label style="display: flex; align-items: center; gap: 1rem; padding: 1rem; border-bottom: 1px solid #eee; cursor: pointer;">
+                <input type="checkbox" name="dataset_ids" value="{{ dataset.id }}" style="width: 20px; height: 20px;">
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; margin-bottom: 0.25rem;">{{ dataset.name }}</div>
+                    <div style="font-size: 0.9rem; color: #666;">{{ dataset.description or 'No description' }}</div>
+                    <div style="font-size: 0.8rem; color: #888; margin-top: 0.25rem;">
+                        Owner: {{ dataset.owner.name }} | Status: {{ dataset.status.value|title }}
+                    </div>
+                </div>
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if not my_datasets and not public_datasets %}
+    <div style="padding: 2rem; background: #f8f9fa; border-radius: 10px; text-align: center; margin-bottom: 2rem;">
+        <p style="color: #666; margin-bottom: 1rem;">No available datasets found to add.</p>
+        <a href="{{ url_for('datasets_web.upload_dataset') }}" class="btn btn-primary">Upload New Dataset</a>
+    </div>
+    {% else %}
+    <div style="margin-top: 2rem;">
+        <button type="submit" class="btn btn-primary" style="padding: 0.75rem 2rem; font-size: 1.1rem;">Add Selected Datasets</button>
+    </div>
+    {% endif %}
+</form>
+{% endblock %}

@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, render_template, redirect, url_for, flash, request, current_app
 from flask_login import login_required, current_user
 from app.extensions import db
-from app.models.tee import Dataset, DatasetStatus
+from app.models.tee import Dataset, DatasetStatus, CollaborationSession, SessionStatus
 from app.services.gcp_tee import GCPTEEService
 
 logger = logging.getLogger(__name__)
@@ -131,3 +131,58 @@ def delete_dataset(dataset_id):
     db.session.commit()
     flash('Dataset deleted', 'success')
     return redirect(url_for('datasets_web.list_datasets'))
+
+
+@bp.route('/<int:dataset_id>')
+@login_required
+def view_dataset(dataset_id):
+    """View dataset details"""
+    dataset = Dataset.query.get_or_404(dataset_id)
+    
+    # Check access (owner or public)
+    if dataset.owner_id != current_user.id and not dataset.is_public:
+        flash('Access denied', 'error')
+        return redirect(url_for('datasets_web.list_datasets'))
+        
+    return render_template('datasets/view.html', dataset=dataset)
+
+
+@bp.route('/open/<int:dataset_id>')
+@login_required
+def open_dataset(dataset_id):
+    """
+    Handle file explorer click:
+    - If owner: view dataset
+    - If not owner: initiate collaboration session
+    """
+    dataset = Dataset.query.get_or_404(dataset_id)
+    
+    if dataset.owner_id == current_user.id:
+        return redirect(url_for('datasets_web.view_dataset', dataset_id=dataset.id))
+    else:
+        # Initiate collaboration session
+        session_name = f"Collaboration on {dataset.name}"
+        
+        # Create session
+        session = CollaborationSession(
+            name=session_name,
+            description=f"Auto-generated session for dataset {dataset.name}",
+            creator_id=current_user.id,
+            allow_cross_party_joins=True,
+            require_unanimous_approval=True,
+            status=SessionStatus.ACTIVE
+        )
+        
+        # Add participants
+        session.participants.append(current_user)
+        if dataset.owner_id != current_user.id:
+            session.participants.append(dataset.owner)
+            
+        # Add dataset
+        session.datasets.append(dataset)
+        
+        db.session.add(session)
+        db.session.commit()
+        
+        flash(f'Collaboration session initiated for "{dataset.name}"', 'success')
+        return redirect(url_for('tee_web.session_detail', session_id=session.id))

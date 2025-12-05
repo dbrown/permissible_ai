@@ -105,6 +105,39 @@ def session_detail(session_id):
     # Get datasets
     datasets = session.datasets.all()
     
+    # Fetch real-time metadata from TEE
+    tee_service = GCPTEEService()
+    dataset_ids = [d.id for d in datasets]
+    tee_dataset_info = tee_service.get_datasets_info(dataset_ids)
+    
+    # Process datasets to find common columns
+    dataset_columns = {}
+    all_columns = []
+    
+    for dataset in datasets:
+        cols = []
+        # Prefer TEE info over DB info
+        if dataset.id in tee_dataset_info and tee_dataset_info[dataset.id].get('columns'):
+             cols = tee_dataset_info[dataset.id]['columns']
+        elif dataset.schema_info:
+            if isinstance(dataset.schema_info, list):
+                cols = dataset.schema_info
+            elif isinstance(dataset.schema_info, dict):
+                cols = dataset.schema_info.get('columns', list(dataset.schema_info.keys()))
+        
+        # Ensure cols is a list of strings
+        if isinstance(cols, list):
+            cols = [str(c) for c in cols]
+        else:
+            cols = []
+            
+        dataset_columns[dataset.id] = cols
+        all_columns.extend(cols)
+    
+    from collections import Counter
+    col_counts = Counter(all_columns)
+    common_columns = {col for col, count in col_counts.items() if count > 1}
+    
     # Get queries with approval status
     queries = session.queries.order_by(Query.submitted_at.desc()).all()
     
@@ -134,7 +167,10 @@ def session_detail(session_id):
         session=session,
         datasets=datasets,
         queries=queries,
-        query_approvals_data=query_approvals_data
+        query_approvals_data=query_approvals_data,
+        dataset_columns=dataset_columns,
+        common_columns=common_columns,
+        tee_dataset_info=tee_dataset_info
     )
 
 
@@ -457,3 +493,58 @@ def query_results(query_id):
         query=query,
         results=results
     )
+
+
+@bp.route('/<int:session_id>/datasets/add', methods=['GET', 'POST'])
+@login_required
+def add_dataset(session_id):
+    """Add existing datasets to a collaboration session"""
+    session = CollaborationSession.query.get_or_404(session_id)
+    
+    if not session.is_participant(current_user):
+        flash('You do not have access to this collaboration session', 'error')
+        return redirect(url_for('tee_web.sessions'))
+        
+    if request.method == 'POST':
+        dataset_ids = request.form.getlist('dataset_ids')
+        if dataset_ids:
+            count = 0
+            for ds_id in dataset_ids:
+                dataset = Dataset.query.get(ds_id)
+                # Verify ownership or public access and participant ownership
+                if dataset and (dataset.owner_id == current_user.id or (dataset.is_public and session.is_participant(dataset.owner))):
+                    if dataset not in session.datasets:
+                        session.datasets.append(dataset)
+                        count += 1
+            
+            if count > 0:
+                db.session.commit()
+                flash(f'{count} dataset(s) added to the session', 'success')
+            else:
+                flash('No new datasets were added', 'info')
+        
+        return redirect(url_for('tee_web.session_detail', session_id=session.id))
+
+    # Get datasets already in session to exclude them
+    existing_ids = [d.id for d in session.datasets]
+    
+    # My datasets (not in session)
+    my_datasets = Dataset.query.filter(
+        Dataset.owner_id == current_user.id,
+        ~Dataset.id.in_(existing_ids) if existing_ids else True
+    ).all()
+    
+    # Public datasets from other participants (not in session)
+    participant_ids = [p.id for p in session.participants if p.id != current_user.id]
+    public_datasets = []
+    if participant_ids:
+        public_datasets = Dataset.query.filter(
+            Dataset.owner_id.in_(participant_ids),
+            Dataset.is_public == True,
+            ~Dataset.id.in_(existing_ids) if existing_ids else True
+        ).all()
+        
+    return render_template('tee/add_dataset.html', 
+                         session=session,
+                         my_datasets=my_datasets,
+                         public_datasets=public_datasets)

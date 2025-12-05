@@ -38,6 +38,15 @@
                 <span>Uploaded:</span>
                 <span>{{ dataset.uploaded_at.strftime('%Y-%m-%d') }}</span>
             </div>
+            <div style="margin-top: 1rem;">
+                <a href="{{ url_for('datasets_web.open_dataset', dataset_id=dataset.id) }}" style="display: block; text-align: center; background: #007bff; color: white; text-decoration: none; padding: 0.5rem; border-radius: 4px;">
+                    {% if current_user.is_authenticated and dataset.owner_id == current_user.id %}
+                    View Dataset
+                    {% else %}
+                    Collaborate
+                    {% endif %}
+                </a>
+            </div>
         </div>
     </div>
     {% endfor %}

@@ -92,6 +92,9 @@ def tee_callback():
                 dataset.status = DatasetStatus.AVAILABLE
                 dataset.checksum = metadata.get('checksum')
                 dataset.file_size_bytes = metadata.get('file_size')
+                dataset.row_count = metadata.get('row_count')
+                if metadata.get('columns'):
+                    dataset.schema_info = {'columns': metadata.get('columns')}
             elif status == 'failed':
                 dataset.status = DatasetStatus.FAILED
                 dataset.error_message = metadata.get('error')

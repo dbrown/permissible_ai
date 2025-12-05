@@ -23,6 +23,7 @@ from google.cloud import kms
 from google.oauth2 import service_account
 from google.api_core import exceptions as google_exceptions
 import jwt
+import requests
 from cryptography.hazmat.primitives import hashes
 
 logger = logging.getLogger(__name__)
@@ -201,8 +202,6 @@ class GCPTEEService:
         logger.info(f"Fetching attestation from shared TEE: {self.tee_endpoint}")
         
         try:
-            import requests
-            
             # Call shared TEE service for attestation
             response = requests.get(
                 f"{self.tee_endpoint}/attestation",
@@ -416,8 +415,6 @@ class GCPTEEService:
         logger.info(f"Executing query {query_id} for session {session_id} in shared TEE")
         
         try:
-            import requests
-            
             # Submit query to shared TEE service
             response = requests.post(
                 f"{self.tee_endpoint}/execute",
@@ -558,6 +555,33 @@ class GCPTEEService:
                 
         except Exception as e:
             logger.error(f"Failed to get datasets info from TEE: {e}")
+            return {}
+    
+    def get_all_datasets_info(self) -> Dict[int, Any]:
+        """
+        Get metadata for ALL datasets currently in the TEE
+        
+        Returns:
+            Dictionary mapping dataset_id to metadata
+        """
+        try:
+            logger.info(f"Fetching all datasets from TEE at {self.tee_endpoint}/datasets/list")
+            response = requests.get(
+                f"{self.tee_endpoint}/datasets/list",
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                # Convert string keys back to integers
+                result = response.json()
+                logger.info(f"Retrieved {len(result)} datasets from TEE")
+                return {int(k): v for k, v in result.items()}
+            else:
+                logger.warning(f"Failed to list datasets from TEE: {response.status_code} - {response.text}")
+                return {}
+                
+        except Exception as e:
+            logger.error(f"Failed to list datasets from TEE: {e}")
             return {}
     
     # Helper methods

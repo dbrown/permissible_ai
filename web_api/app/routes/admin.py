@@ -5,6 +5,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models.user import User, AdminRequest
+from app.services.gcp_tee import GCPTEEService
 from app.utils.decorators import admin_required
 
 bp = Blueprint('admin', __name__, url_prefix='/admin')
@@ -92,3 +93,14 @@ def reject_request(request_id):
     flash(f'Admin request rejected for {admin_request.user.email}.', 'info')
     
     return redirect(url_for('admin.requests'))
+
+
+@bp.route('/tee-datasets')
+@login_required
+@admin_required
+def tee_datasets():
+    """View all datasets currently loaded in the TEE"""
+    tee_service = GCPTEEService()
+    tee_datasets = tee_service.get_all_datasets_info()
+    
+    return render_template('admin_tee_datasets.html', datasets=tee_datasets)
