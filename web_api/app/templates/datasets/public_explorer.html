@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Public File Explorer{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 2rem;">
+    <h1>Public File Explorer</h1>
+    <p style="color: #666;">Browse datasets shared publicly by other users.</p>
+</div>
+
+{% if datasets %}
+<div style="display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));">
+    {% for dataset in datasets %}
+    <div style="background: white; border-radius: 10px; padding: 1.5rem; box-shadow: 0 2px 5px rgba(0,0,0,0.05); border: 1px solid #eee;">
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+            <h3 style="margin: 0; font-size: 1.2rem;">{{ dataset.name }}</h3>
+            <span style="
+                padding: 0.25rem 0.75rem; 
+                border-radius: 20px; 
+                font-size: 0.8rem; 
+                font-weight: 600;
+                background: #e2e3e5; color: #383d41;
+            ">
+                {{ dataset.status.value|title }}
+            </span>
+        </div>
+        
+        <p style="color: #666; font-size: 0.9rem; margin-bottom: 1rem; min-height: 3rem;">
+            {{ dataset.description or 'No description provided.' }}
+        </p>
+        
+        <div style="border-top: 1px solid #eee; padding-top: 1rem; margin-top: auto;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #888; margin-bottom: 0.5rem;">
+                <span>Owner:</span>
+                <span style="font-weight: 600; color: #555;">{{ dataset.owner.name }}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: #888; margin-bottom: 0.5rem;">
+                <span>Uploaded:</span>
+                <span>{{ dataset.uploaded_at.strftime('%Y-%m-%d') }}</span>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div style="text-align: center; padding: 4rem 2rem; background: #f8f9fa; border-radius: 10px;">
+    <h3 style="color: #6c757d; margin-bottom: 1rem;">No Public Datasets</h3>
+    <p style="color: #6c757d;">There are no public datasets available at this time.</p>
+</div>
+{% endif %}
+{% endblock %}

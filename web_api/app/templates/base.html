@@ -193,12 +193,13 @@
 </head>
 <body>
     <div class="container">
-        {% if current_user.is_authenticated %}
         <nav>
             <ul>
+                {% if current_user.is_authenticated %}
                 <li><a href="{{ url_for('main.dashboard') }}">Dashboard</a></li>
                 <li><a href="{{ url_for('tee_web.sessions') }}">Collaborations</a></li>
                 <li><a href="{{ url_for('datasets_web.list_datasets') }}">My Datasets</a></li>
+                <li><a href="{{ url_for('datasets_web.public_files') }}">Public Files</a></li>
                 <li><a href="{{ url_for('api_keys.list_keys') }}">API Keys</a></li>
                 {% if current_user.is_admin %}
                 <li><a href="{{ url_for('admin.requests') }}">Admin Requests</a></li>
@@ -214,9 +215,13 @@
                     {% endif %}
                     <a href="{{ url_for('auth.logout') }}">Logout</a>
                 </li>
+                {% else %}
+                <li><a href="{{ url_for('main.index') }}">Home</a></li>
+                <li><a href="{{ url_for('datasets_web.public_files') }}">Public Files</a></li>
+                <li style="margin-left: auto;"><a href="{{ url_for('auth.login') }}">Login</a></li>
+                {% endif %}
             </ul>
         </nav>
-        {% endif %}
         
         <div class="content">
             {% with messages = get_flashed_messages(with_categories=true) %}

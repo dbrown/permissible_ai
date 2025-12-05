@@ -158,6 +158,7 @@ class Dataset(db.Model):
     
     # Status
     status = db.Column(db.Enum(DatasetStatus), default=DatasetStatus.UPLOADING, nullable=False, index=True)
+    is_public = db.Column(db.Boolean, default=False, nullable=False)
     uploaded_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     available_at = db.Column(db.DateTime)
     
@@ -183,6 +184,7 @@ class Dataset(db.Model):
             'file_size_bytes': self.file_size_bytes,
             'row_count': self.row_count,
             'status': self.status.value,
+            'is_public': self.is_public,
             'uploaded_at': self.uploaded_at.isoformat(),
             'available_at': self.available_at.isoformat() if self.available_at else None
         }

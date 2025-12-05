@@ -28,6 +28,13 @@ def list_datasets():
     return render_template('datasets/index.html', datasets=datasets, dataset_info=dataset_info)
 
 
+@bp.route('/public')
+def public_files():
+    """List all public files in the system"""
+    datasets = Dataset.query.filter_by(is_public=True).order_by(Dataset.uploaded_at.desc()).all()
+    return render_template('datasets/public_explorer.html', datasets=datasets)
+
+
 @bp.route('/upload', methods=['GET', 'POST'])
 @login_required
 def upload_dataset():
@@ -35,6 +42,7 @@ def upload_dataset():
     if request.method == 'POST':
         name = request.form.get('name')
         description = request.form.get('description', '')
+        is_public = request.form.get('is_public') == 'on'
         
         if not name:
             flash('Dataset name is required', 'error')
@@ -45,7 +53,8 @@ def upload_dataset():
             name=name,
             description=description,
             owner_id=current_user.id,
-            status=DatasetStatus.PENDING
+            status=DatasetStatus.PENDING,
+            is_public=is_public
         )
         
         db.session.add(dataset)
